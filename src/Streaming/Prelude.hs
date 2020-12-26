@@ -1,18 +1,15 @@
-{-| The names exported by this module are closely modeled on those in @Prelude@ and @Data.List@,
-    but also on
-    <http://hackage.haskell.org/package/pipes-4.1.9/docs/Pipes-Prelude.html Pipes.Prelude>,
-    <http://hackage.haskell.org/package/pipes-group-1.0.3/docs/Pipes-Group.html Pipes.Group>
-    and <http://hackage.haskell.org/package/pipes-parse-3.0.6/docs/Pipes-Parse.html Pipes.Parse>.
-    The module may be said to give independent expression to the conception of
-    Producer \/ Source \/ Generator manipulation
-    articulated in the latter two modules. Because we dispense with piping and
-    conduiting, the distinction between all of these modules collapses. Some things are
-    lost but much is gained: on the one hand, everything comes much closer to ordinary
-    beginning Haskell programming and, on the other, acquires the plasticity of programming
-    directly with a general free monad type. The leading type, @Stream (Of a) m r@ is chosen to permit an api
-    that is as close as possible to that of @Data.List@ and the @Prelude@.
+{-| The pervasive type here, @Stream (Of a) m r@, is chosen to enable an API as
+    close as possible to that of the @Prelude@ and @Data.List@.
+    The names exported are closely modeled on those modules and on
+    <http://hackage.haskell.org/package/pipes-4.3.14/docs/Pipes-Prelude.html Pipes.Prelude>,
+    <http://hackage.haskell.org/package/pipes-group-1.0.12/docs/Pipes-Group.html Pipes.Group>
+    and <http://hackage.haskell.org/package/pipes-parse-3.0.8/docs/Pipes-Parse.html Pipes.Parse>.
+    It can be thought of as @streaming@\'s expression of @Producer@s\/@Source@s\/@Generator@s
+    appearing in the latter two modules, in a more unified concept. It enables
+    a basic Haskell programming style while also affording the flexibility that
+    comes with a general free monad.
 
-    Import qualified thus:
+    Import qualified:
 
 > import Streaming
 > import qualified Streaming.Prelude as S
@@ -24,28 +21,28 @@
 
    Other libraries that come up in passing are
 
-> import qualified Control.Foldl as L -- cabal install foldl
+> import qualified Control.Foldl as L -- from the foldl package
 > import qualified Pipes as P
 > import qualified Pipes.Prelude as P
 > import qualified System.IO as IO
 
-     Here are some correspondences between the types employed here and elsewhere:
+     These are some correspondences between the types employed here and elsewhere:
 
->               streaming             |            pipes               |       conduit       |  io-streams
-> -------------------------------------------------------------------------------------------------------------------
-> Stream (Of a) m ()                  | Producer a m ()                | Source m a          | InputStream a
->                                     | ListT m a                      | ConduitM () o m ()  | Generator r ()
-> -------------------------------------------------------------------------------------------------------------------
-> Stream (Of a) m r                   | Producer a m r                 | ConduitM () o m r   | Generator a r
-> -------------------------------------------------------------------------------------------------------------------
-> Stream (Of a) m (Stream (Of a) m r) | Producer a m (Producer a m r)  |
-> --------------------------------------------------------------------------------------------------------------------
-> Stream (Stream (Of a) m) r          | FreeT (Producer a m) m r       |
-> --------------------------------------------------------------------------------------------------------------------
-> --------------------------------------------------------------------------------------------------------------------
-> ByteString m ()                     | Producer ByteString m ()       | Source m ByteString  | InputStream ByteString
-> --------------------------------------------------------------------------------------------------------------------
->
++---------------------------------------+---------------------------------+-----------------------+--------------------------+
+|              @streaming@              |            @pipes@              |       @conduit@       |       @io-stream@        |
++=======================================+=================================+=======================+==========================+
+| @Stream (Of a) m ()@                  | @Producer a m ()@               | @Source m a@          | @InputStream a@          |
+|                                       |                                 |                       |                          |
+|                                       | @ListT m a@                     | @ConduitT () o m ()@  | @Generator r ()@         |
++---------------------------------------+---------------------------------+-----------------------+--------------------------+
+| @Stream (Of a) m r@                   | @Producer a m r@                | @ConduitT () o m r@   | @Generator a r@          |
++---------------------------------------+---------------------------------+-----------------------+--------------------------+
+| @Stream (Of a) m (Stream (Of a) m r)@ | @Producer a m (Producer a m r)@ |                                                  |
++---------------------------------------+---------------------------------+                                                  |
+| @Stream (Stream (Of a) m) r@          | @FreeT (Producer a m) m r@      |                                                  |
++---------------------------------------+---------------------------------+-----------------------+--------------------------+
+| @ByteStream m ()@                     | @Producer ByteString m ()@      | @Source m ByteString@ | @InputStream ByteString@ |
++---------------------------------------+---------------------------------+-----------------------+--------------------------+
 -}
 {-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE CPP                 #-}
@@ -156,7 +153,7 @@ module Streaming.Prelude (
  --   , groupedBy
 
 
-    -- * Sum and Compose manipulation
+    -- * @Sum@ and @Compose@ manipulation
 
     , distinguish
     , switch
@@ -221,7 +218,7 @@ module Streaming.Prelude (
     -- , minimum
     -- , null
 
-    -- * Zips and unzips
+    -- * Zipping and unzipping
     , zip
     , zipWith
     , zip3
@@ -237,7 +234,7 @@ module Streaming.Prelude (
     , mergeOn
     , mergeBy
 
-    -- * Maybes
+    -- * @Maybe@s
     -- $maybes
     , catMaybes
     , mapMaybe
@@ -254,7 +251,7 @@ module Streaming.Prelude (
     -- * Interoperation
     , reread
 
-    -- * Basic Type
+    -- * The basic type
     , Stream
   ) where
 
@@ -310,34 +307,33 @@ import Prelude hiding (map, mapM, mapM_, filter, drop, dropWhile, take, mconcat
 -- instance (Read a) => Read1 (Of a) where readsPrec1 = readsPrec
 -- instance (Show a) => Show1 (Of a) where showsPrec1 = showsPrec
 
-{-| Note that 'lazily', 'strictly', 'fst'', and 'mapOf' are all so-called /natural transformations/ on the primitive @Of a@ functor.
-    If we write
+{-| Note that 'lazily', 'strictly', 'fst'', and 'mapOf' are all so-called
+    [/natural transformations/](https://en.wikipedia.org/wiki/Natural_transformation)
+    of the basic @Of a@ functor. If we write
 
 >  type f ~~> g = forall x . f x -> g x
 
-   then we can restate some types as follows:
+    then we can restate some types as follows:
 
->  mapOf            :: (a -> b) -> Of a ~~> Of b   -- Bifunctor first
+>  mapOf            :: (a -> b) -> Of a ~~> Of b   -- Data.Bifunctor.first
 >  lazily           ::             Of a ~~> (,) a
 >  Identity . fst'  ::             Of a ~~> Identity a
 
-   Manipulation of a @Stream f m r@ by mapping often turns on recognizing natural transformations of @f@.
-   Thus @maps@ is far more general the the @map@ of the @Streaming.Prelude@, which can be
-   defined thus:
+    Mapping over a @Stream f m r@ often involves natural transformations of @f@.
+    To illustrate, @maps@ is more general the the @map@ of the @Streaming.Prelude@,
+    which can be defined by
 
 >  S.map :: (a -> b) -> Stream (Of a) m r -> Stream (Of b) m r
 >  S.map f = maps (mapOf f)
 
-  i.e.
+    i.e.
 
 >  S.map f = maps (\(a :> x) -> (f a :> x))
 
-  This rests on recognizing that @mapOf@ is a natural transformation; note though
-  that it results in such a transformation as well:
+    Recognize that @mapOf@ turns a function into a natural transformation, as
+    does @map@:
 
 >  S.map :: (a -> b) -> Stream (Of a) m ~~> Stream (Of b) m
-
-  Thus we can @maps@ it in turn.
 
 
  -}
@@ -345,12 +341,12 @@ lazily :: Of a b -> (a,b)
 lazily = \(a:>b) -> (a,b)
 {-# INLINE lazily #-}
 
-{-| Convert a standard Haskell pair into a left-strict pair  -}
+{-| Convert a standard Haskell pair into a left-strict pair. -}
 strictly :: (a,b) -> Of a b
 strictly = \(a,b) -> a :> b
 {-# INLINE strictly #-}
 
-{-| @fst'@ and @snd'@ extract the first and second element of a pair
+{-| @fst'@ and @snd'@ extract the first and second elements of a pair.
 
 >>> S.fst' (1:>"hi")
 1
@@ -358,8 +354,8 @@ strictly = \(a,b) -> a :> b
 "hi"
 
 
-     They are contained in the @_first@ and @_second@ lenses,
-     if any lens library is in scope
+     They are recoverable from the @_first@ and @_second@ lenses,
+     if any lens library is in scope.
 
 >>> import Lens.Micro
 >>> (1:>"hi") ^. S._first
@@ -376,17 +372,17 @@ snd' :: Of a b -> b
 snd' (_ :> b) = b
 {-# INLINE snd' #-}
 
-{-| Map a function over the first element of an @Of@ pair
+{-| Map a function over the first element of an @Of@ pair.
 
 >>> S.mapOf even (1:>"hi")
 False :> "hi"
 
-     @mapOf@ is just @first@ from the @Bifunctor@ instance
+    @mapOf@ is just @first@ from the @Bifunctor@ instance:
 
 >>> first even (1:>"hi")
 False :> "hi"
 
-     and is contained in the @_first@ lens
+    and is recoverable from the @_first@ lens:
 
 >>> import Lens.Micro
 >>> over S._first even (1:>"hi")
@@ -398,16 +394,19 @@ mapOf :: (a -> b) -> Of a r -> Of b r
 mapOf f (a :> b) = f a :> b
 {-# INLINE mapOf #-}
 
-{-| A lens into the first element of a left-strict pair -}
+{-| A lens into the first element of a left-strict pair. -}
 _first :: Functor f => (a -> f a') -> Of a b -> f (Of a' b)
 _first afb (a :> b) = fmap (\c -> c :> b) (afb a)
 {-# INLINE _first #-}
 
-{-| A lens into the second element of a left-strict pair -}
+{-| A lens into the second element of a left-strict pair. -}
 _second :: Functor f => (b -> f b') -> Of a b -> f (Of a b')
 _second afb (a :> b) = fmap (\c -> a :> c) (afb b)
 {-# INLINABLE _second #-}
 
+{- | Run the stream to completion, reporting the logical conjunction of its
+     elements alongside the final result.  /Does not short-circuit!/
+-}
 all :: Monad m => (a -> Bool) -> Stream (Of a) m r -> m (Of Bool r)
 all thus = loop True where
   loop b str = case str of
@@ -420,6 +419,9 @@ all thus = loop True where
         return (False :> r)
 {-# INLINABLE all #-}
 
+{- | Return the logical conjunction of stream elements, short-circuiting at the
+     first @False@.
+-}
 all_ :: Monad m => (a -> Bool) -> Stream (Of a) m r -> m Bool
 all_ thus = loop True where
   loop b str = case str of
@@ -431,6 +433,9 @@ all_ thus = loop True where
 {-# INLINABLE all_ #-}
 
 
+{- | Run the stream to completion, reporting the logical disjunction of its
+     elements alongside the final result.  /Does not short-circuit!/
+-}
 any :: Monad m => (a -> Bool) -> Stream (Of a) m r -> m (Of Bool r)
 any thus = loop False where
   loop b str = case str of
@@ -443,6 +448,9 @@ any thus = loop False where
       else loop False rest
 {-# INLINABLE any #-}
 
+{- | Return the logical disjunction of stream elements, short-circuiting at the
+     first @True@.
+-}
 any_ :: Monad m => (a -> Bool) -> Stream (Of a) m r -> m Bool
 any_ thus = loop False where
   loop b str = case str of
@@ -453,7 +461,7 @@ any_ thus = loop False where
       else loop False rest
 {-# INLINABLE any_ #-}
 
-{-| Break a sequence upon meeting element falls under a predicate,
+{-| Break a sequence upon meeting an element that satisfies a predicate,
     keeping it and the rest of the stream as the return value.
 
 >>> rest <- S.print $ S.break even $ each [1,1,2,3]
@@ -479,7 +487,7 @@ break thePred = loop where
 {-| Yield elements, using a fold to maintain state, until the accumulated
    value satifies the supplied predicate. The fold will then be short-circuited
    and the element that breaks it will be put after the break.
-   This function is easiest to use with 'Control.Foldl.purely'
+   This function is easiest to use with @Control.Foldl.purely@.
 
 >>> rest <- each [1..10] & L.purely S.breakWhen L.sum (>10) & S.print
 1
@@ -539,7 +547,7 @@ breaks thus  = loop  where
 {-# INLINABLE breaks #-}
 
 {-| Apply an action to all values, re-yielding each.
-    The return value (@y@) of the function is ignored.
+    The return value (@y@) of the action is ignored.
 
 >>> S.product $ S.chain Prelude.print $ S.each [1..5]
 1
@@ -563,7 +571,6 @@ chain f = loop where
 {-# INLINABLE chain #-}
 
 {-| Make a stream of foldable containers into a stream of their separate elements.
-    This is just
 
 > concat str = for str each
 
@@ -572,13 +579,13 @@ chain f = loop where
 'y'
 'z'
 
-    Note that it also has the effect of 'Data.Maybe.catMaybes', 'Data.Either.rights'
-    @map snd@ and such-like operations.
+    Note that it also has the effect of 'Data.Maybe.catMaybes', 'Data.Either.rights',
+    @map snd@, and similar operations.
 
 >>> S.print $ S.concat $ S.each [Just 1, Nothing, Just 2]
 1
 2
->>> S.print $  S.concat $ S.each [Right 1, Left "Error!", Right 2]
+>>> S.print $ S.concat $ S.each [Right 1, Left "Error!", Right 2]
 1
 2
 >>> S.print $ S.concat $ S.each [('A',1), ('B',2)]
@@ -601,11 +608,11 @@ concat = loop
 -- The above hand-written loop is ~20% faster than the 'for' implementation
 -- concat str = for str each
 
-{-| The natural @cons@ for a @Stream (Of a)@.
+{-| Prepend an element.
 
 > cons a stream = yield a >> stream
 
-   Useful for interoperation:
+    Useful for interoperation:
 
 > Data.Text.foldr S.cons (return ()) :: Text -> Stream (Of Char) m ()
 > Lazy.foldrChunks S.cons (return ()) :: Lazy.ByteString -> Stream (Of Strict.ByteString) m ()
@@ -617,8 +624,7 @@ cons :: (Monad m) => a -> Stream (Of a) m r -> Stream (Of a) m r
 cons a str = Step (a :> str)
 {-# INLINE cons #-}
 
-{- | Cycle repeatedly through the layers of a stream, /ad inf./ This
-     function is functor-general
+{- | Cycle infinitely through the (functor-general) layers of a stream.
 
 > cycle = forever
 
@@ -638,30 +644,31 @@ cycle str = loop where loop = str >> loop
 {-# INLINABLE cycle #-}
 
 
-{-| Interpolate a delay of n seconds between yields.
+{-| Interpolate a delay of /n/ seconds between yields.
 -}
 delay :: MonadIO m => Double -> Stream (Of a) m r -> Stream (Of a) m r
 delay seconds = loop where
-  pico = truncate (seconds * 1000000)
+  micro = truncate (seconds * 1000000)
   loop str = do
     e <- lift $ next str
     case e of
       Left r -> Return r
       Right (a,rest) -> do
         yield a
-        liftIO $ threadDelay pico
+        liftIO $ threadDelay micro
         loop rest
 {-# INLINABLE delay #-}
 
 
 
 {-| Where a transformer returns a stream, run the effects of the stream, keeping
-   the return value. This is usually used at the type
+    the return value. When the transformer is another preceeding stream, it can
+    be written as
 
 > drained :: Monad m => Stream (Of a) m (Stream (Of b) m r) -> Stream (Of a) m r
 > drained = join . fmap (lift . effects)
 
-   Here, for example, we split a stream in two places and throw out the middle segment:
+    Here, for example, we split a stream in two places and throw out the middle segment:
 
 >>> rest <- S.print $ S.drained $ S.splitAt 2 $ S.splitAt 5 $ each [1..7]
 1
@@ -670,9 +677,9 @@ delay seconds = loop where
 6
 7
 
-   In particular, we can define versions  of @take@ and @takeWhile@ which
-   retrieve the return value of the rest of the stream - and which can
-   thus be used with 'maps':
+    In particular, we can define versions of `take` and `takeWhile` which
+    retrieve the return value of the rest of the stream and can
+    thus be used with 'maps':
 
 > take' n = S.drained . S.splitAt n
 > takeWhile' thus = S.drained . S.span thus
@@ -685,7 +692,7 @@ drained tms = tms >>= lift . effects
 -- ---------------
 -- drop
 -- ---------------
-{-|  Ignore the first n elements of a stream, but carry out the actions
+{-|  Ignore the first /n/ elements of a stream (but carry out the actions).
 
 >>> S.toList $ S.drop 2 $ S.replicateM 5 getLine
 a<Enter>
@@ -695,7 +702,7 @@ d<Enter>
 e<Enter>
 ["c","d","e"] :> ()
 
-     Because it retains the final return value, @drop n@  is a suitable argument
+     Because it retains the final return value, @drop n@ is a suitable argument
      for @maps@:
 
 >>> S.toList $ concats $ maps (S.drop 4) $ chunksOf 5 $ each [1..20]
@@ -716,7 +723,8 @@ drop n str = loop n str where
 -- dropWhile
 -- ---------------
 
-{- | Ignore elements of a stream until a test succeeds, retaining the rest.
+{- | Ignore elements of a stream (but carry out the actions) until a test
+     succeeds, retaining the rest.
 
 >>> S.print $ S.dropWhile ((< 5) . length) S.stdinLn
 one<Enter>
@@ -774,7 +782,7 @@ each = Foldable.foldr (\a p -> Step (a :> p)) (Return ())
 > S.effects . S.copy       = id
 > hoist S.effects . S.copy = id
 
-    The similar @effects@ and @copy@ operations in @Data.ByteString.Streaming@ obey the same rules.
+    The similar @effects@ and @copy@ operations in @Streaming.ByteString@ obey the same rules.
 
 -}
 effects :: Monad m => Stream (Of a) m r -> m r
@@ -814,6 +822,7 @@ elem a' = loop False where
         else loop False rest
 {-# INLINABLE elem #-}
 
+{-| A short-circuiting version of `elem`. -}
 elem_ :: (Monad m, Eq a) => a -> Stream (Of a) m r -> m Bool
 elem_ a' = loop False where
   loop True _ = return True
@@ -831,7 +840,7 @@ elem_ a' = loop False where
 -- ------
 
 {-| An infinite stream of enumerable values, starting from a given value.
-    It is the same as @S.iterate succ@.
+    It is the same as @S.`Streaming.iterate` `succ`@.
     Because their return type is polymorphic, @enumFrom@, @enumFromThen@
     and @iterate@ are useful with functions like @zip@ and @zipWith@, which
     require the zipped streams to have the same return type. 
@@ -855,8 +864,8 @@ enumFrom = loop where
 {-# INLINABLE enumFrom #-}
 
 
-{-| An infinite sequence of enumerable values at a fixed distance, determined
-   by the first and second values. See the discussion of 'Streaming.enumFrom'
+{-| An infinite sequence of enumerable values at a fixed interval, determined
+   by the first and second values. See 'Streaming.enumFrom'.
 
 >>> S.print $ S.take 3 $ S.enumFromThen 100 200
 100
@@ -890,7 +899,7 @@ erase = loop where
 -- filter
 -- ---------------
 
--- | Skip elements of a stream that fail a predicate
+-- | Skip elements of a stream that fail a predicate.
 filter  :: (Monad m) => (a -> Bool) -> Stream (Of a) m r -> Stream (Of a) m r
 filter thePred = loop where
   loop str = case str of
@@ -906,7 +915,7 @@ filter thePred = loop where
 -- filterM
 -- ---------------
 
--- | Skip elements of a stream that fail a monadic test
+-- | Skip elements of a stream that fail a monadic test.
 filterM  :: (Monad m) => (a -> m Bool) -> Stream (Of a) m r -> Stream (Of a) m r
 filterM thePred = loop where
   loop str = case str of
@@ -947,19 +956,18 @@ filterM thePred = loop where
 >>> S.fold_ (+) 0 id $ S.each [1..10]
 55
 
-    The general folds 'fold', 'fold_', 'foldM' and 'foldM_' are arranged
-    for use with @Control.Foldl@ 'Control.Foldl.purely' and 'Control.Foldl.impurely'
+    The general folds 'fold', 'fold_', 'foldM' and 'foldM_' are designed
+    for use with @Control.Foldl.purely@ and @Control.Foldl.impurely@.
 
 >>> L.purely fold_ L.sum $ each [1..10]
 55
 >>> L.purely fold_ (liftA3 (,,) L.sum L.product L.list) $ each [1..10]
 (55,3628800,[1,2,3,4,5,6,7,8,9,10])
 
-    All functions marked with an underscore
-    (e.g. @fold_@, @sum_@) omit the stream's return value in a left-strict pair.
-    They are good for exiting streaming completely,
-    but when you are, e.g. @mapped@-ing over a @Stream (Stream (Of a) m) m r@,
-    which is to be compared with @[[a]]@. Specializing, we have e.g.
+    All functions marked with an underscore (e.g. @fold_@, @sum_@) omit the
+    stream\'s return value in a left-strict pair, and may also have
+    short-circuiting behavior.  Specializing for when you are `mapped` over a
+    @Stream (Stream (Of a) m) m r@&#x2014;analogous to @[[a]]@&#x2014;we have
 
 >  mapped sum :: (Monad m, Num n) => Stream (Stream (Of Int)) IO () -> Stream (Of n) IO ()
 >  mapped (fold mappend mempty id) :: Stream (Stream (Of Int)) IO () -> Stream (Of Int) IO ()
@@ -978,8 +986,8 @@ filterM thePred = loop where
 (10,10,[10])
 -}
 
-{-| Strict fold of a 'Stream' of elements, preserving only the result of the fold, not
-    the return value of the stream.  The third parameter will often be 'id' where a fold
+{-| Strictly fold of a 'Stream' of elements, preserving only the result of the fold, not
+    the return value of the stream.  The extractor parameter will often be 'id' where a fold
     is written by hand:
 
 >>> S.fold_ (+) 0 id $ each [1..10]
@@ -995,8 +1003,8 @@ fold_ :: Monad m => (x -> a -> x) -> x -> (x -> b) -> Stream (Of a) m r -> m b
 fold_ step begin done = fmap (\(a :> _) -> a) . fold step begin done
 {-# INLINE fold_ #-}
 
-{-| Strict fold of a 'Stream' of elements that preserves the return value.
-    The third parameter will often be 'id' where a fold is written by hand:
+{-| Strictly fold of a 'Stream' of elements that preserves the return value.
+    The extractor parameter will often be 'id' where a fold is written by hand:
 
 >>> S.fold (+) 0 id $ each [1..10]
 55 :> ()
@@ -1004,14 +1012,14 @@ fold_ step begin done = fmap (\(a :> _) -> a) . fold step begin done
 >>> S.fold (*) 1 id $ S.fold (+) 0 id $ S.copy $ each [1..10]
 3628800 :> (55 :> ())
 
-    It can be used to replace a standard Haskell type with one more suited to
+    It can be used to replace a standard Haskell type by someone more suited to
     writing a strict accumulation function. It is also crucial to the
-    Applicative instance for @Control.Foldl.Fold@  We can apply such a fold
-    @purely@
+    Applicative instance for @Control.Foldl.Fold@.  We can apply such a fold
+    @purely@:
 
 > Control.Foldl.purely S.fold :: Monad m => Fold a b -> Stream (Of a) m r -> m (Of b r)
 
-    Thus, specializing a bit:
+    Specializing a bit:
 
 > L.purely S.fold L.sum :: Stream (Of Int) Int r -> m (Of Int r)
 > mapped (L.purely S.fold L.sum) :: Stream (Stream (Of Int)) IO r -> Stream (Of Int) IO r
@@ -1037,7 +1045,7 @@ fold step begin done str =  fold_loop str begin
 {-# INLINE fold #-}
 
 
-{-| Strict, monadic fold of the elements of a @Stream (Of a)@
+{-| Strict, monadic fold of the elements of a @Stream (Of a)@.
 
 > Control.Foldl.impurely foldM :: Monad m => FoldM a b -> Stream (Of a) m () -> m b
 -}
@@ -1047,11 +1055,12 @@ foldM_
 foldM_ step begin done = fmap (\(a :> _) -> a) . foldM step begin done
 {-# INLINE foldM_ #-}
 
-{-| Strict, monadic fold of the elements of a @Stream (Of a)@
+{-| Strict, monadic fold of the elements of a @Stream (Of a)@, also reporting
+    the stream\'s final return value.
 
 > Control.Foldl.impurely foldM' :: Monad m => FoldM a b -> Stream (Of a) m r -> m (b, r)
 
-   Thus to accumulate the elements of a stream as a vector, together with a random
+   To accumulate the elements of a stream as a vector, together with a random
    element we might write:
 
 >>> L.impurely S.foldM (liftA2 (,) L.vectorM L.random) $ each [1..10::Int] :: IO (Of (Vector Int, Maybe Int) ())
@@ -1068,7 +1077,7 @@ foldM step begin done str = do
   where
     loop stream !x = case stream of
       Return r         -> done x >>= \b -> return (b :> r)
-      Effect m          -> m >>= \s -> loop s x
+      Effect m         -> m >>= \s -> loop s x
       Step (a :> rest) -> do
         x' <- step x a
         loop rest x'
@@ -1090,7 +1099,7 @@ foldM step begin done str = do
 
 {-| A natural right fold for consuming a stream of elements.
     See also the more general 'iterTM' in the 'Streaming' module
-    and the still more general 'destroy'
+    and the still more general 'destroy'.
 
 > foldrT (\a p -> Streaming.yield a >> p) = id
 > foldrT (\a p -> Pipes.yield a     >> p) :: Monad m => Stream (Of a) m r -> Producer a m r
@@ -1109,7 +1118,7 @@ foldrT step = loop where
 
 {-| A natural right fold for consuming a stream of elements.
     See also the more general 'iterT' in the 'Streaming' module and the
-    still more general 'destroy'
+    still more general 'destroy'.
 -}
 foldrM :: Monad m
        => (a -> m r -> m r) -> Stream (Of a) m r -> m r
@@ -1125,7 +1134,7 @@ foldrM step = loop where
 -- ---------------
 
 -- | @for@ replaces each element of a stream with an associated stream. Note that the
--- associated stream may layer any functor.
+-- associated stream may replace `Of a` with another functor as well.
 for :: (Monad m, Functor f) => Stream (Of a) m r -> (a -> Stream f m x) -> Stream f m r
 for str0 f = loop str0 where
   loop str = case str of
@@ -1159,7 +1168,7 @@ for str0 f = loop str0 where
 --         False -> Return (Step s)
 -- {-# INLINABLE groupedBy #-}
 
-{-| Group elements of a stream in accordance with the supplied comparison.
+{-| Group successive equal elements of a stream, given an equation.
 
 
 >>> S.print $ mapped S.toList $ S.groupBy (>=) $ each [1,2,3,1,2,3,4,3,2,4,5,6,7,6,5]
@@ -1186,7 +1195,7 @@ groupBy equals = loop  where
 {-# INLINABLE groupBy #-}
 
 
-{-| Group successive equal items together
+{-| Group successive equal elements of a stream, given their `Eq` instance.
 
 >>> S.toList $ mapped S.toList $ S.group $ each "baaaaad"
 ["b","aaaaa","d"] :> ()
@@ -1200,6 +1209,9 @@ group = groupBy (==)
 {-# INLINE group #-}
 
 
+{- | Run a stream to completion and return the first element or `Nothing` if
+   empty, along with the final result.  /Does not short-circuit!/
+-}
 head :: Monad m => Stream (Of a) m r -> m (Of (Maybe a) r)
 head str = case str of
   Return r            -> return (Nothing :> r)
@@ -1207,6 +1219,9 @@ head str = case str of
   Step (a :> rest)    -> effects rest >>= \r -> return (Just a :> r)
 {-# INLINABLE head #-}
 
+{- | Run a stream until encountering the first element, and then stops, or
+   `Nothing` if empty.
+-}
 head_ :: Monad m => Stream (Of a) m r -> m (Maybe a)
 head_ str = case str of
   Return _ -> return Nothing
@@ -1215,7 +1230,7 @@ head_ str = case str of
 {-# INLINABLE head_ #-}
 
 
-{-| Intersperse given value between each element of the stream.
+{-| Intersperse a given value between each element of the stream.
 
 >>> S.print $ S.intersperse 0 $ each [1,2,3]
 1
@@ -1244,7 +1259,7 @@ intersperse x str = case str of
 -- iterate
 -- ---------------
 
-{-| Iterate a pure function from a seed value, streaming the results forever
+{-| Iterate a pure function from a seed value, streaming the results forever.
 
 
 
@@ -1254,7 +1269,7 @@ iterate f = loop where
   loop a' = Effect (return (Step (a' :> loop (f a'))))
 {-# INLINABLE iterate #-}
 
--- | Iterate a monadic function from a seed value, streaming the results forever
+-- | Iterate a monadic function from a seed value, streaming the results forever.
 iterateM :: Monad m => (a -> m a) -> m a -> Stream (Of a) m r
 iterateM f = loop where
   loop ma  = Effect $ do
@@ -1263,7 +1278,9 @@ iterateM f = loop where
 {-# INLINABLE iterateM #-}
 
 
-
+{- | Run a stream to completion, returning the last element (or `Nothing` if
+   empty) along with the stream\'s final result.
+-}
 last :: Monad m => Stream (Of a) m r -> m (Of (Maybe a) r)
 last = loop Nothing_ where
   loop mb str = case str of
@@ -1276,6 +1293,9 @@ last = loop Nothing_ where
 
 
 
+{- | Run a stream to completion, returning the last element (or `Nothing` if
+   empty).
+-}
 last_ :: Monad m => Stream (Of a) m r -> m (Maybe a)
 last_ = loop Nothing_ where
   loop mb str = case str of
@@ -1291,7 +1311,7 @@ last_ = loop Nothing_ where
 -- length
 -- ---------------
 
-{-| Run a stream, remembering only its length:
+{-| Run a stream, remembering only its length.
 
 >>> runIdentity $ S.length_ (S.each [1..10] :: Stream (Of Int) Identity ())
 10
@@ -1318,7 +1338,7 @@ length = fold (\n _ -> n + 1) 0 id
 -- map
 -- ---------------
 
-{-| Standard map on the elements of a stream.
+{-| Transform the elements of a stream.
 
 >>> S.stdoutLn $ S.map reverse $ each (words "alpha beta")
 ahpla
@@ -1339,7 +1359,7 @@ map f = maps (\(x :> rest) -> f x :> rest)
 --   map (f . g) bs
 -- #-}
 
-{-| Replace each element of a stream with the result of a monadic action
+{-| Replace each element of a stream with the result of a monadic action.
 
 >>> S.print $ S.mapM readIORef $ S.chain (\ior -> modifyIORef ior (*100)) $ S.mapM newIORef $ each [1..6]
 100
@@ -1349,7 +1369,7 @@ map f = maps (\(x :> rest) -> f x :> rest)
 500
 600
 
-See also 'chain' for a variant of this which ignores the return value of the function and just uses the side effects.
+See also 'chain' for a variant which ignores the return value of the action.
 -}
 mapM :: Monad m => (a -> m b) -> Stream (Of a) m r -> Stream (Of b) m r
 mapM f = loop where
@@ -1399,9 +1419,9 @@ mapped :: (forall x. Stream (Of a) IO x -> IO (Of b x)) -> Stream (Stream (Of a)
 
      to process groups which have been demarcated in an effectful, @IO@-based
      stream by grouping functions like 'Streaming.Prelude.group',
-     'Streaming.Prelude.split' or 'Streaming.Prelude.breaks'. Summary functions
+     'Streaming.Prelude.split', or 'Streaming.Prelude.breaks'. Summary functions
      like 'Streaming.Prelude.fold', 'Streaming.Prelude.foldM',
-     'Streaming.Prelude.mconcat' or 'Streaming.Prelude.toList' are often used
+     'Streaming.Prelude.mconcat', or 'Streaming.Prelude.toList' are often used
      to define the transformation argument. For example:
 
 >>> S.toList_ $ S.mapped S.toList $ S.split 'c' (S.each "abcde")
@@ -1438,7 +1458,9 @@ mappedPost :: (Monad m, Functor g) => (forall x . f x -> m (g x)) -> Stream f m 
 mappedPost = mapsMPost
 {-# INLINE mappedPost #-}
 
-{-| Map each element of the stream to a monoid, and take the monoidal sum of the results.
+{-| Map each element of the stream to a monoid, strictly accumulate their
+    monoidal sum, and return that along with the final stream result.
+    /Does not short-circuit even if `mappend` does!/
 
 >>> S.foldMap Sum $ S.take 2 (S.stdinLn)
 1<Enter>
@@ -1451,11 +1473,16 @@ foldMap :: (Monad m, Monoid w) => (a -> w) -> Stream (Of a) m r -> m (Of w r)
 foldMap f = fold (\ !acc a -> mappend acc (f a)) mempty id
 {-# INLINE foldMap #-}
 
+{-| Map each element of the stream to a monoid, strictly accumulating their
+    monoidal sum and returning it.
+    /Does not short-circuit even if `mappend` does!/
+-}
 foldMap_ :: (Monad m, Monoid w) => (a -> w) -> Stream (Of a) m r -> m w
 foldMap_ f = fold_ (\ !acc a -> mappend acc (f a)) mempty id
 {-# INLINE foldMap_ #-}
 
-{-| Fold streamed items into their monoidal sum
+{-| Fold streamed items into their monoidal sum, returning it and the final
+    stream result. /Does not short-circuit even if `mappend` does!/
 
 >>> S.mconcat $ S.take 2 $ S.map (Data.Monoid.Last . Just) S.stdinLn
 first<Enter>
@@ -1468,27 +1495,43 @@ mconcat = fold mappend mempty id
 {-# INLINE mconcat #-}
 
 data Maybe_ a = Just_ !a | Nothing_
+
+{-| Fold streamed items into their monoidal sum.
+    /Does not short-circuit even if `mappend` does!/
+-}
 mconcat_ :: (Monad m, Monoid w) => Stream (Of w) m r -> m w
 mconcat_ = fold_ mappend mempty id
 
+{- | Run a stream to completion, returning the minimum element (or `Nothing` if
+   empty) along with the final stream result.
+-}
 minimum :: (Monad m, Ord a) => Stream (Of a) m r -> m (Of (Maybe a) r)
 minimum = fold (\m a -> case m of Nothing_ -> Just_ a ; Just_ a' -> Just_ (min a a'))
                Nothing_
                (\m -> case m of Nothing_ -> Nothing; Just_ r -> Just r)
 {-# INLINE minimum #-}
 
+{- | Run a stream to completion, returning the minimum element (or `Nothing` if
+   empty).
+-}
 minimum_ :: (Monad m, Ord a) => Stream (Of a) m r -> m (Maybe a)
 minimum_ = fold_ (\m a -> case m of Nothing_ -> Just_ a ; Just_ a' -> Just_ (min a a'))
                  Nothing_
                  (\m -> case m of Nothing_ -> Nothing; Just_ r -> Just r)
 {-# INLINE minimum_ #-}
 
+{- | Run a stream to completion, returning the maximum element (or `Nothing` if
+   empty) along with the final stream result.
+-}
 maximum :: (Monad m, Ord a) => Stream (Of a) m r -> m (Of (Maybe a) r)
 maximum = fold (\m a -> case m of Nothing_ -> Just_ a ; Just_ a' -> Just_ (max a a'))
                Nothing_
                (\m -> case m of Nothing_ -> Nothing; Just_ r -> Just r)
 {-# INLINE maximum #-}
 
+{- | Run a stream to completion, returning the maximum element (or `Nothing` if
+   empty).
+-}
 maximum_ :: (Monad m, Ord a) => Stream (Of a) m r -> m (Maybe a)
 maximum_ = fold_ (\m a -> case m of Nothing_ -> Just_ a ; Just_ a' -> Just_ (max a a'))
                  Nothing_
@@ -1497,9 +1540,12 @@ maximum_ = fold_ (\m a -> case m of Nothing_ -> Just_ a ; Just_ a' -> Just_ (max
 
 {-| The standard way of inspecting the first item in a stream of elements, if the
      stream is still \'running\'. The @Right@ case contains a
-     Haskell pair, where the more general @inspect@ would return a left-strict pair.
+     Haskell pair, where the more general @inspect@ would return the functor
+     as-is (typically, the left-strict pair, @`Of` a@).
+     
      There is no reason to prefer @inspect@ since, if the @Right@ case is exposed,
-     the first element in the pair will have been evaluated to whnf.
+     the first element in the pair will have been evaluated to weak head normal
+     form already.
 
 > next    :: Monad m => Stream (Of a) m r -> m (Either r    (a, Stream (Of a) m r))
 > inspect :: Monad m => Stream (Of a) m r -> m (Either r (Of a (Stream (Of a) m r)))
@@ -1514,7 +1560,7 @@ maximum_ = fold_ (\m a -> case m of Nothing_ -> Just_ a ; Just_ a' -> Just_ (max
 > IOStreams.unfoldM (fmap (either (const Nothing) Just) . next) :: Stream (Of a) IO b -> IO (InputStream a)
 > Conduit.unfoldM   (fmap (either (const Nothing) Just) . next) :: Stream (Of a) m r -> Source a m r
 
-     But see 'uncons', which is better fitted to these @unfoldM@s
+     But see 'uncons', which is better fitted to these @unfoldM@s.
 -}
 next :: Monad m => Stream (Of a) m r -> m (Either r (a, Stream (Of a) m r))
 next = loop where
@@ -1525,8 +1571,8 @@ next = loop where
 {-# INLINABLE next #-}
 
 
-{-| Exhaust a stream deciding whether @a@ was an element.
-
+{-| Exhaust a stream, deciding whether @a@ was an element.
+    /Does not short-circuit!/
 -}
 
 notElem :: (Monad m, Eq a) => a -> Stream (Of a) m r -> m (Of Bool r)
@@ -1541,6 +1587,8 @@ notElem a' = loop True where
         else loop True rest
 {-# INLINABLE notElem #-}
 
+{- | Run a stream searching for an @a@ and reporting success or failure. Stop
+   when it is found. -}
 notElem_ :: (Monad m, Eq a) => a -> Stream (Of a) m r -> m Bool
 notElem_ a' = loop True where
   loop False _ = return False
@@ -1554,8 +1602,7 @@ notElem_ a' = loop True where
 {-# INLINABLE notElem_ #-}
 
 
-{-| Remove repeated elements from a Stream. 'nubOrd' of course accumulates a 'Data.Set.Set' of
-    elements that have already been seen and should thus be used with care.
+{-| Remove duplicate elements from a Stream according to their `Ord` instance.
 
 >>> S.toList_ $ S.nubOrd $ S.take 5 S.readLn :: IO [Int]
 1<Enter>
@@ -1571,7 +1618,7 @@ nubOrd :: (Monad m, Ord a) => Stream (Of a) m r -> Stream (Of a) m r
 nubOrd = nubOrdOn id
 {-# INLINE nubOrd #-}
 
-{-|  Use 'nubOrdOn' to have a custom ordering function for your elements. -}
+{-| Remove duplicate elements from a Stream according to a comparison. -}
 nubOrdOn :: (Monad m, Ord b) => (a -> b) -> Stream (Of a) m r -> Stream (Of a) m r
 nubOrdOn f xs = loop mempty xs where
   loop !set stream = case stream of
@@ -1582,12 +1629,14 @@ nubOrdOn f xs = loop mempty xs where
          then loop set rest
          else Step (a :> loop (Set.insert fa set) rest)
 
-{-| More efficient versions of above when working with 'Int's that use 'Data.IntSet.IntSet'. -}
+{-| More efficient versions of above when working with 'Int's, using 'Data.IntSet.IntSet'. -}
 
 nubInt :: Monad m => Stream (Of Int) m r -> Stream (Of Int) m r
 nubInt = nubIntOn id
 {-# INLINE nubInt #-}
 
+{-| Like `nubOrdOn`, except instead of using a comparison, use an \"int ID\" or
+    \"hash\" function. -}
 nubIntOn :: Monad m => (a -> Int) -> Stream (Of a) m r -> Stream (Of a) m r
 nubIntOn f xs = loop mempty xs where
   loop !set stream = case stream of
@@ -1599,7 +1648,8 @@ nubIntOn f xs = loop mempty xs where
          else Step (a :> loop (IntSet.insert fa set) rest)
 
 
-{-|
+{-| Separate values in distinct streams.
+
 > filter p = hoist effects (partition p)
 
  -}
@@ -1646,12 +1696,13 @@ partitionEithers =  loop where
        return (loop rest)
 
 
--- | Fold a 'Stream' of numbers into their product
+-- | Fold a 'Stream' of numbers into their product.
 product_ :: (Monad m, Num a) => Stream (Of a) m () -> m a
 product_ = fold_ (*) 1 id
 {-# INLINE product_ #-}
 
-{-| Fold a 'Stream' of numbers into their product with the return value
+{-| Fold a 'Stream' of numbers into their product, and return it along with the
+    final stream result.
 
 >  mapped product :: Stream (Stream (Of Int)) m r -> Stream (Of Int) m r
 -}
@@ -1664,7 +1715,8 @@ product = fold (*) 1 id
 -- read
 -- ---------------
 
-{- | Make a stream of strings into a stream of parsed values, skipping bad cases
+{- | Transform a stream of strings into a stream of parsed values, skipping
+     parse failures.
 
 >>> S.sum_ $ S.read $ S.takeWhile (/= "total") S.stdinLn :: IO Int
 1000<Enter>
@@ -1683,7 +1735,7 @@ read stream = for stream $ \str -> case readMaybe str of
 -- ---------------
 -- repeat
 -- ---------------
-{-| Repeat an element /ad inf./ .
+{-| Repeat an element forever.
 
 >>> S.print $ S.take 3 $ S.repeat 1
 1
@@ -1696,7 +1748,7 @@ repeat a = loop where loop = Effect (return (Step (a :> loop)))
 {-# INLINE repeat #-}
 
 
-{-| Repeat a monadic action /ad inf./, streaming its results.
+{-| Repeat a monadic action forever, streaming its results.
 
 >>> S.toList $ S.take 2 $ repeatM getLine
 one<Enter>
@@ -1717,7 +1769,7 @@ repeatM ma = loop where
 -- replicate
 -- ---------------
 
--- | Repeat an element several times.
+-- | Yield an element /n/ times.
 replicate :: Monad m => Int -> a -> Stream (Of a) m ()
 replicate n _ | n <= 0 = return ()
 replicate n a = loop n where
@@ -1725,7 +1777,7 @@ replicate n a = loop n where
   loop m = Effect (return (Step (a :> loop (m-1))))
 {-# INLINABLE replicate #-}
 
-{-| Repeat an action several times, streaming its results.
+{-| Repeat an action /n/ times, streaming its results.
 
 >>> S.print $ S.replicateM 2 getCurrentTime
 2015-08-18 00:57:36.124508 UTC
@@ -1741,8 +1793,9 @@ replicateM n ma = loop n where
     return (Step (a :> loop (m-1)))
 {-# INLINABLE replicateM #-}
 
-{-| Read an @IORef (Maybe a)@ or a similar device until it reads @Nothing@.
-    @reread@ provides convenient exit from the @io-streams@ library
+{-| Run an action returning a `Maybe`, streaming all the `Just`s and stopping
+    at the first `Nothing`.  @reread@ provides a convenient sink for
+    @io-streams@-style producers.
 
 > reread readIORef    :: IORef (Maybe a) -> Stream (Of a) IO ()
 > reread Streams.read :: System.IO.Streams.InputStream a -> Stream (Of a) IO ()
@@ -1756,8 +1809,8 @@ reread step s = loop where
       Just a  -> return (Step (a :> loop))
 {-# INLINABLE reread #-}
 
-{-| Strict left scan, streaming, e.g. successive partial results. The seed
-    is yielded first, before any action of finding the next element is performed.
+{-| Strict left scan, streaming successive partial results. The seed is yielded
+    first, before any action of finding the next element is performed.
 
 
 >>> S.print $ S.scan (++) "" id $ each (words "a b c d")
@@ -1767,7 +1820,7 @@ reread step s = loop where
 "abc"
 "abcd"
 
-    'scan' is fitted for use with @Control.Foldl@, thus:
+    'scan' can be used with @Control.Foldl.purely@:
 
 >>> S.print $ L.purely S.scan L.list $ each [3..5]
 []
@@ -1789,8 +1842,7 @@ scan step begin done str = Step (done begin :> loop begin str)
 {-# INLINABLE scan #-}
 
 {-| Strict left scan, accepting a monadic function. It can be used with
-    'FoldM's from @Control.Foldl@ using 'impurely'. Here we yield
-    a succession of vectors each recording
+    @FoldM@s from @Control.Foldl@ using @impurely@.
 
 >>> let v = L.impurely scanM L.vectorM $ each [1..4::Int] :: Stream (Of (Vector Int)) IO ()
 >>> S.print v
@@ -1820,7 +1872,7 @@ scanM step begin done str = Effect $ do
         )
 {-# INLINABLE scanM #-}
 
-{-| Label each element in a stream with a value accumulated according to a fold.
+{-| Label each element in a stream with a value incrementally accumulated by a fold.
 
 >>> S.print $ S.scanned (*) 1 id $ S.each [100,200,300]
 (100,100)
@@ -1859,15 +1911,12 @@ data Maybe' a = Just' a | Nothing'
 -- sequence
 -- ---------------
 
-{-| Like the 'Data.List.sequence' but streaming. The result type is a
-    stream of a\'s, /but is not accumulated/; the effects of the elements
+{-| Like @Data.List@ 'Data.List.sequence', but streaming. The result type is a
+    stream of @a@\'s, /but is not accumulated/; the effects of the elements
     of the original stream are interleaved in the resulting stream. Compare:
 
 > sequence :: Monad m =>       [m a]           -> m [a]
 > sequence :: Monad m => Stream (Of (m a)) m r -> Stream (Of a) m r
-
-   This obeys the rule
-
 -}
 sequence :: Monad m => Stream (Of (m a)) m r -> Stream (Of a) m r
 sequence = loop where
@@ -1883,6 +1932,8 @@ sequence = loop where
 -- show
 -- ---------------
 
+
+{- | Purely convert all yielded values to `String`s. -}
 show :: (Monad m, Show a) => Stream (Of a) m r -> Stream (Of String) m r
 show = map Prelude.show
 {-# INLINE show #-}
@@ -1890,12 +1941,13 @@ show = map Prelude.show
 -- sum
 -- ---------------
 
--- | Fold a 'Stream' of numbers into their sum
+-- | Strictly fold a 'Stream' of numbers into their sum.
 sum_ :: (Monad m, Num a) => Stream (Of a) m () -> m a
 sum_ = fold_ (+) 0 id
 {-# INLINE sum_ #-}
 
-{-| Fold a 'Stream' of numbers into their sum with the return value
+{-| Strictly fold a 'Stream' of numbers into their sum, and return it along with
+    the final stream result.
 
 >  mapped S.sum :: Stream (Stream (Of Int)) m r -> Stream (Of Int) m r
 
@@ -1924,13 +1976,14 @@ sum = fold (+) 0 id
 -- span
 -- ---------------
 
--- | Stream elements until one fails the condition, return the rest.
+-- | Stream elements until one fails the condition, and return the rest of the
+--   stream starting with that one.
 span :: Monad m => (a -> Bool) -> Stream (Of a) m r
       -> Stream (Of a) m (Stream (Of a) m r)
 span thePred = loop where
   loop str = case str of
     Return r         -> Return (Return r)
-    Effect m          -> Effect $ fmap loop m
+    Effect m         -> Effect $ fmap loop m
     Step (a :> rest) -> if thePred a
       then Step (a :> loop rest)
       else Return (Step (a :> rest))
@@ -1940,9 +1993,9 @@ span thePred = loop where
 {-| Split a stream of elements wherever a given element arises.
     The action is like that of 'Prelude.words'.
 
->>> S.stdoutLn $ mapped S.toList $ S.split ' ' $ each "hello world  "
-hello
-world
+>>> S.print $ mapped S.toList $ S.split ' ' $ each "hello world  "
+"hello"
+"world"
 
 -}
 
@@ -1959,9 +2012,11 @@ split t  = loop  where
 {-# INLINABLE split #-}
 
 {-| Split a succession of layers after some number, returning a streaming or
-    effectful pair. This function is the same as the 'splitsAt' exported by the
-    @Streaming@ module, but since this module is imported qualified, it can
-    usurp a Prelude name. It specializes to:
+    effectful pair. This function is the same as 'Streaming.splitsAt'
+    exported by the @Streaming@ module, but since this module is imported
+    qualified, it can usurp a @Prelude@ name.
+
+    Typically,
 
 >  splitAt :: (Monad m) => Int -> Stream (Of a) m r -> Stream (Of a) m (Stream (Of a) m r)
 
@@ -1993,11 +2048,12 @@ subst f s = loop s where
 -- take
 -- ---------------
 
-{-| End a stream after n elements; the original return value is thus lost.
-    'splitAt' preserves this information. Note that, like @splitAt@, this
-    function is functor-general, so that, for example, you can @take@ not
-    just a number of items from a stream of elements, but a number
-    of substreams and the like.
+{-| End a stream after /n/ elements, causing the original eventual result to be
+    inaccessible. (Use 'splitAt' if the result is required.)
+
+    Like @splitAt@, this function is functor-general; you can @take@ not just a
+    number of items from a stream of elements, but a number of substreams, for
+    example.
 
 >>> S.toList $ S.take 3 $ each "with"
 "wit" :> ()
@@ -2025,19 +2081,19 @@ take n0 str = loop n0 str where
 -- takeWhile
 -- ---------------
 
-{-| End stream when an element fails a condition; the original return value is lost.
-    By contrast 'span' preserves this information, and is generally more desirable.
+{-| End the stream when an element fails a condition, causing the original
+    eventual result to be inaccessible.  (Use 'span' if the result is required.)
 
-> S.takeWhile thus = void . S.span thus
+> S.takeWhile p = void . S.span p
 
-    To preserve the information - but thus also force the rest of the stream to be
-    developed - write
+    To preserve the information&#x2014;but also force the rest of the stream to
+    be developed&#x2014;write
 
-> S.drained . S.span thus
+> takeWhileWithResult p = S.drained . S.span p
 
-    as @dropWhile thus@ is
+    Likewise,
 
-> S.effects . S.span thus
+> dropWhileWithResult p = S.effects . S.span p
 
 -}
 takeWhile :: Monad m => (a -> Bool) -> Stream (Of a) m r -> Stream (Of a) m ()
@@ -2060,25 +2116,25 @@ takeWhileM thePred = loop where
 {-# INLINE takeWhileM #-}
 
 
-{-| Convert an effectful @Stream (Of a)@ into a list of @as@
+{-| Convert an effectful @Stream (Of a)@ into a list of @a@s.
 
-    Note: Needless to say, this function does not stream properly.
-    It is basically the same as Prelude 'mapM' which, like 'replicateM',
-    'sequence' and similar operations on traversable containers
-    is a leading cause of space leaks.
-
+    This function does not stream properly.  It suffers from the same strictness
+    problems as the @Prelude@'s 'Prelude.mapM', 'Prelude.replicateM',
+    'Prelude.sequence', etc., forcing the list to be fully evaluated before
+    starting to be consumed.
 -}
 toList_ :: Monad m => Stream (Of a) m r -> m [a]
 toList_ = fold_ (\diff a ls -> diff (a: ls)) id (\diff -> diff [])
 {-# INLINE toList_ #-}
 
 
-{-| Convert an effectful 'Stream' into a list alongside the return value
+{-| Convert an effectful 'Stream' into a list alongside the return value.
 
 >  mapped toList :: Stream (Stream (Of a) m) m r -> Stream (Of [a]) m r
 
-    Like 'toList_', 'toList' breaks streaming; unlike 'toList_' it /preserves the return value/
-    and thus is frequently useful with e.g. 'mapped'
+    Like 'toList_', 'toList' breaks streaming; unlike 'toList_' it
+    /preserves the return value/ and thus is frequently useful with e.g.
+    'mapped':
 
 >>> S.print $ mapped S.toList $ chunksOf 3 $ each [1..9]
 [1,2,3]
@@ -2099,7 +2155,7 @@ toList = fold (\diff a ls -> diff (a: ls)) id (\diff -> diff [])
 
 
 {-| Inspect the first item in a stream of elements, without a return value.
-    @uncons@ provides convenient exit into another streaming type:
+    @uncons@ provides convenient adapters for other streaming libraries:
 
 > IOStreams.unfoldM uncons :: Stream (Of a) IO b -> IO (InputStream a)
 > Conduit.unfoldM uncons   :: Stream (Of a) m r -> Conduit.Source m a
@@ -2114,11 +2170,10 @@ uncons = loop where
 {-# INLINABLE uncons #-}
 
 
-{-| Build a @Stream@ by unfolding steps starting from a seed. In particular note
-    that @S.unfoldr S.next = id@.
+{-| Build a @Stream@ by unfolding steps starting from a seed. In particular,
+    @S.unfoldr S.next = id@.
 
-    The seed can of course be anything, but this is one natural way
-    to consume a @pipes@ 'Pipes.Producer'. Consider:
+    To consume a @pipes@ 'Pipes.Producer', consider:
 
 >>> S.stdoutLn $ S.take 2 $ S.unfoldr Pipes.next Pipes.stdinLn
 hello<Enter>
@@ -2154,6 +2209,7 @@ unfoldr step = loop where
 -- ---------------------------------------
 -- untilLeft
 -- ---------------------------------------
+{- | Like `untilJust`. Stop on a `Left` or the result, and ignore `Right`s. -}
 untilLeft :: Monad m => m (Either r a) -> Stream (Of a) m r
 untilLeft act = Effect loop where
   loop = do
@@ -2166,6 +2222,7 @@ untilLeft act = Effect loop where
 -- ---------------------------------------
 -- untilRight
 -- ---------------------------------------
+{- | Like `untilJust`. Stop on a `Right` or the result, and ignore `Left`s. -}
 untilRight :: Monad m => m (Either a r) -> Stream (Of a) m r
 untilRight act = Effect loop where
   loop = do
@@ -2179,7 +2236,7 @@ untilRight act = Effect loop where
 -- with
 -- ---------------------------------------
 
-{-| Replace each element in a stream of individual Haskell values (a @Stream (Of a) m r@) with an associated 'functorial' step.
+{-| Replace each streamed element with an associated \'functorial\' step.
 
 > for str f  = concats (with str f)
 > with str f = for str (yields . f)
@@ -2206,7 +2263,7 @@ with s f = loop s where
 -- yield
 -- ---------------------------------------
 
-{-| A singleton stream
+{-| A singleton stream.
 
 >>> stdoutLn $ yield "hello"
 hello
@@ -2230,7 +2287,37 @@ yield :: Monad m => a -> Stream (Of a) m ()
 yield a = Step (a :> Return ())
 {-# INLINE yield #-}
 
--- | Zip two 'Stream's
+{- | Zip two 'Stream's.
+
+   This is a left-biased operation.  First the left stream is run until it
+   yields a value, whereupon it is suspended and the right stream runs until it
+   yields a value, and then both are yielded in a tuple.  The first stream to
+   terminate determines the resulting @r@.  The consequences of this ordering
+   are demonstrated here:
+
+> sampleStream :: String -> Stream (Of String) IO String
+> sampleStream name = do
+>     S.yield $ name ++ ": first element"
+>     liftIO $ putStrLn $ name ++ ": first effect" 
+>     liftIO $ putStrLn $ name ++ ": second effect" 
+>     S.yield $ name ++ ": second element"
+>     return $ name ++ ": done"
+>
+> main :: IO ()
+> main = do
+>     result <- S.print $ S.zip (sampleStream "A") (sampleStream "B")
+>     print result
+
+   prints
+
+> ("A: first element","B: first element")
+> A: first effect
+> A: second effect
+> B: first effect
+> B: second effect
+> ("A: second element","B: second element")
+> "A: done"
+-}
 zip :: Monad m
     => Stream (Of a) m r
     -> Stream (Of b) m r
@@ -2238,7 +2325,7 @@ zip :: Monad m
 zip = zipWith (,)
 {-# INLINE zip #-}
 
--- | Zip two 'Stream's using the provided combining function
+-- | Zip two 'Stream's using the provided combining function.
 zipWith :: Monad m
     => (a -> b -> c)
     -> Stream (Of a) m r
@@ -2256,7 +2343,17 @@ zipWith f = loop
 {-# INLINABLE zipWith #-}
 
 
--- | Zip three 'Stream's with a combining function
+-- | Zip three 'Stream's together.
+zip3 :: Monad m
+     => Stream (Of a) m r
+     -> Stream (Of b) m r
+     -> Stream (Of c) m r
+     -> Stream (Of (a,b,c)) m r
+zip3 = zipWith3 (,,)
+{-# INLINABLE zip3 #-}
+
+
+-- | Zip three 'Stream's with a combining function.
 zipWith3 :: Monad m =>
        (a -> b -> c -> d)
        -> Stream (Of a) m r
@@ -2281,22 +2378,13 @@ zipWith3 op = loop where
                 loop rest0 rest1 rest2
 {-# INLINABLE zipWith3 #-}
 
-
--- | Zip three 'Stream's together
-zip3 :: Monad m
-     => Stream (Of a) m r
-     -> Stream (Of b) m r
-     -> Stream (Of c) m r
-     -> Stream (Of (a,b,c)) m r
-zip3 = zipWith3 (,,)
-{-# INLINABLE zip3 #-}
-
 -- --------------
 -- IO fripperies
 -- --------------
 
-{-| View standard input as a @Stream (Of String) m r@. By contrast, 'stdoutLn' renders a @Stream (Of String) m r@ to standard output. The names
-    follow @Pipes.Prelude@
+{-| View standard input line-by-line as a @Stream (Of String)@. By contrast,
+    'stdoutLn' renders a @Stream (Of String) m r@ to standard output. The names
+    follow @Pipes.Prelude@.
 
 >>> stdoutLn stdinLn
 hello<Enter>
@@ -2318,7 +2406,7 @@ stdinLn :: MonadIO m => Stream (Of String) m ()
 stdinLn = fromHandle IO.stdin
 {-# INLINABLE stdinLn #-}
 
-{-| Read values from 'IO.stdin', ignoring failed parses.
+{-| Read values on separate lines from 'IO.stdin', ignoring failed parses.
 
 >>> :set -XTypeApplications
 >>> S.sum $ S.take 2 (S.readLn @IO @Int)
@@ -2346,9 +2434,9 @@ readLn = loop where
 {-# INLINABLE readLn #-}
 
 
-{-| Read 'String's from a 'IO.Handle' using 'IO.hGetLine'
+{-| Read a 'String' line-by-line from a 'IO.Handle' using 'IO.hGetLine'.
 
-    Terminates on end of input
+    Terminates on end of input.
 
 >>> IO.withFile "/usr/share/dict/words" IO.ReadMode $ S.stdoutLn . S.take 3 . S.drop 50000 . S.fromHandle
 deflagrator
@@ -2403,8 +2491,9 @@ print = loop where
       loop rest
 
 
-{-| Write 'String's to 'IO.stdout' using 'putStrLn'; terminates on a broken output pipe
-    (The name and implementation are modelled on the @Pipes.Prelude@ @stdoutLn@).
+{-| Write 'String's to 'IO.stdout' using 'putStrLn'; terminate gracefully on a
+    broken output pipe.
+    (The name and implementation are modelled on the @Pipes.Prelude@ @stdoutLn@.)
 
 >>> S.stdoutLn $ S.take 3 $ S.each $ words "one two three four five"
 one
@@ -2428,8 +2517,8 @@ stdoutLn = loop
            Right () -> loop rest
 {-# INLINABLE stdoutLn #-}
 
-{-| Read the lines of a file, using a function of the type: \'@'Stream' ('Of' 'String') 'IO' () -> 'IO' a@\'
-    to turn the stream into a value of type \''IO' a\'.
+{-| Read the lines of a file, using a function of the type
+    @'Stream' ('Of' 'String') 'IO' () -> 'IO' a@ to produce an eventual @a@.
 
 >>> S.writeFile "lines.txt" $ S.take 2 S.stdinLn
 hello<Enter>
@@ -2456,9 +2545,10 @@ world
 writeFile :: FilePath -> Stream (Of String) IO r -> IO r
 writeFile f = IO.withFile f IO.WriteMode . flip toHandle
 
-{-| Write 'String's to 'IO.stdout' using 'putStrLn'
+{-| Write 'String's to 'IO.stdout' using 'putStrLn'.
 
-    Unlike @stdoutLn@, @stdoutLn'@ does not handle a broken output pipe. Thus it can have a polymorphic return
+    Unlike 'stdoutLn', @stdoutLn'@ does not handle a broken output pipe. Thus it
+    can have a polymorphic return
     value, rather than @()@, and this kind of \"connect and resume\" is possible:
 
 >>> rest <- S.stdoutLn' $ S.show $ S.splitAt 3 (each [1..5])
@@ -2477,7 +2567,7 @@ distinguish :: (a -> Bool) -> Of a r -> Sum (Of a) (Of a) r
 distinguish predicate (a :> b) = if predicate a then InR (a :> b) else InL (a :> b)
 {-# INLINE distinguish #-}
 
-sumToEither ::Sum (Of a) (Of b) r ->  Of (Either a b) r
+sumToEither :: Sum (Of a) (Of b) r -> Of (Either a b) r
 sumToEither s = case s of
   InL (a :> r) -> Left a :> r
   InR (b :> r) -> Right b :> r
@@ -2502,7 +2592,9 @@ sumToCompose x = case x of
 {-# INLINE sumToCompose #-}
 
 {-| Store the result of any suitable fold over a stream, keeping the stream for
-    further manipulation. @store f = f . copy@ :
+    further manipulation.
+
+    @store f = f . `copy`@
 
 >>> S.print $ S.store S.product $ each [1..4]
 1
@@ -2519,11 +2611,10 @@ sumToCompose x = case x of
 10 :> (24 :> ())
 
    Here the sum (10) and the product (24) have been \'stored\' for use when
-   finally we have traversed the stream with 'print' . Needless to say,
-   a second 'pass' is excluded conceptually, so the
-   folds that you apply successively with @store@ are performed
-   simultaneously, and in constant memory -- as they would be if,
-   say, you linked them together with @Control.Fold@:
+   finally we have traversed the stream with 'print'. This happens within a
+   single pass, so the incremental accumulations are interleaved
+   \"simultaneously\" and in constant memory&#x2014;as they would be if linked
+   together with @Control.Foldl@.
 
 >>> L.impurely S.foldM (liftA3 (\a b c -> (b, c)) (L.sink Prelude.print) (L.generalize L.sum) (L.generalize L.product)) $ each [1..4]
 1
@@ -2532,21 +2623,19 @@ sumToCompose x = case x of
 4
 (10,24) :> ()
 
-   Fusing folds after the fashion of @Control.Foldl@ will generally be a bit faster
-   than the corresponding succession of uses of 'store', but by
-   constant factor that will be completely dwarfed when any IO is at issue.
+   Fusing folds in the style of @Control.Foldl@ will generally be a bit faster
+   than the corresponding succession of uses of 'store', but by a
+   constant factor that will likely be irrelevant in the presence of IO.
 
-   But 'store' \/ 'copy' is /much/ more powerful, as you can see by reflecting on
-   uses like this:
+   In any case, 'store'\/'copy' are more powerful. For example,
 
 >>> S.sum $ S.store (S.sum . mapped S.product . chunksOf 2) $ S.store (S.product . mapped S.sum . chunksOf 2) $ each [1..6]
 21 :> (44 :> (231 :> ()))
 
-   It will be clear that this cannot be reproduced with any combination of lenses,
-   @Control.Fold@ folds, or the like.  (See also the discussion of 'copy'.)
+   This cannot be reproduced with any combination of lenses, @Control.Foldl@, or
+   the like.  (See also the discussion of 'copy'.)
 
-   It would conceivably be clearer to import a series of specializations of 'store'.
-   It is intended to be used at types like these:
+   @store@ may be useful to understand with these narrower types:
 
 > storeM ::  (forall s m . Monad m => Stream (Of a) m s -> m (Of b s))
 >         -> (Monad n => Stream (Of a) n r -> Stream (Of a) n (Of b r))
@@ -2556,15 +2645,11 @@ sumToCompose x = case x of
 >          -> (MonadIO n => Stream (Of a) n r -> Stream (Of a) n (Of b r)
 > storeMIO = store
 
-    It is clear from these types that we are just using the general instances:
-
-> instance (Functor f, Monad m)   => Monad (Stream f m)
-> instance (Functor f, MonadIO m) => MonadIO (Stream f m)
-
-    We thus can't be touching the elements of the stream, or the final return value.
-    It is the same with other constraints that @Stream (Of a)@ inherits from the underlying monad,
-    like 'MonadResource'.  Thus I can independently filter and write to one file, but
-    nub and write to another, or interact with a database and a logfile and the like:
+    We cannot touch the elements of the stream or the final return value.
+    It is the same with other constraints that @Stream (Of a)@ inherits from the
+    underlying monad, such as @Control.Monad.Trans.Resource.MonadResource@.
+    Thus one can independently filter and write to one file, but `nub` and write
+    to another, or interact with a database and a logfile:
 
 >>> (S.writeFile "hello2.txt" . S.nubOrd) $ store (S.writeFile "hello.txt" . S.filter (/= "world")) $ each ["hello", "world", "goodbye", "world"]
 >>> :! cat hello.txt
@@ -2583,8 +2668,10 @@ store
 store f x = f (copy x)
 {-# INLINE store #-}
 
-{-| Duplicate the content of stream, so that it can be acted on twice in different ways,
-    but without breaking streaming. Thus, with @each [1,2]@ I might do:
+{-| Duplicate the content of a stream, so that it can be acted on twice in
+    different ways, but without breaking streaming.
+
+    Thus, with @`each` [1,2]@ one might do:
 
 >>> S.print $ each ["one","two"]
 "one"
@@ -2593,7 +2680,7 @@ store f x = f (copy x)
 one
 two
 
-    With copy, I can do these simultaneously:
+    With @copy@, these can be done simultaneously:
 
 >>> S.print $ S.stdoutLn $ S.copy $ each ["one","two"]
 "one"
@@ -2601,16 +2688,15 @@ one
 "two"
 two
 
-    'copy' should be understood together with 'effects' and is subject to the rules
+    @copy@ is subject to these rules vis-&#x00E0;-vis `effects`:
 
 > S.effects . S.copy       = id
 > hoist S.effects . S.copy = id
 
-    The similar operations in 'Data.ByteString.Streaming' obey the same rules.
+    The similar operations in @Streaming.ByteString@ obey the same rules.
 
-    Where the actions you are contemplating are each simple folds over
-    the elements, or a selection of elements, then the coupling of the
-    folds is often more straightforwardly effected with `Control.Foldl`,
+    Where the actions are simple folds over the elements, or a selection of
+    elements, they are coupled often more straightforwardly with `Control.Foldl`,
     e.g.
 
 >>> L.purely S.fold (liftA2 (,) L.sum L.product) $ each [1..10]
@@ -2622,7 +2708,7 @@ two
 55 :> (3628800 :> ())
 
     A @Control.Foldl@ fold can be altered to act on a selection of elements by
-    using 'Control.Foldl.handles' on an appropriate lens. Some such
+    using @Control.Foldl.handles@ on an appropriate lens. Some such
     manipulations are simpler and more 'Data.List'-like, using 'copy':
 
 >>> L.purely S.fold (liftA2 (,) (L.handles (L.filtered odd) L.sum) (L.handles (L.filtered even) L.product)) $ each [1..10]
@@ -2638,18 +2724,10 @@ two
 >>> S.sum $ S.filter odd $ S.store (S.product . S.filter even) $ each [1..10]
 25 :> (3840 :> ())
 
-    But anything that fold of a @Stream (Of a) m r@ into e.g. an @m (Of b r)@
-    that has a constraint on @m@ that is carried over into @Stream f m@ -
-    e.g. @Monad@, @MonadIO@, @MonadResource@, etc. can be used on the stream.
-    Thus, I can fold over different groupings of the original stream:
+    We can fold over different groupings of the original stream:
 
 >>>  (S.toList . mapped S.toList . chunksOf 5) $  (S.toList . mapped S.toList . chunksOf 3) $ S.copy $ each [1..10]
 [[1,2,3,4,5],[6,7,8,9,10]] :> ([[1,2,3],[4,5,6],[7,8,9],[10]] :> ())
-
-    The procedure can be iterated as one pleases, as one can see from this (otherwise unadvisable!) example:
-
->>>  (S.toList . mapped S.toList . chunksOf 4) $ (S.toList . mapped S.toList . chunksOf 3) $ S.copy $ (S.toList . mapped S.toList . chunksOf 2) $ S.copy $ each [1..12]
-[[1,2,3,4],[5,6,7,8],[9,10,11,12]] :> ([[1,2,3],[4,5,6],[7,8,9],[10,11,12]] :> ([[1,2],[3,4],[5,6],[7,8],[9,10],[11,12]] :> ()))
 
 
 @copy@ can be considered a special case of 'expand':
@@ -2658,7 +2736,7 @@ two
   copy = 'expand' $ \p (a :> as) -> a :> p (a :> as)
 @
 
-If 'Of' were an instance of 'Control.Comonad.Comonad', then one could write
+If 'Of' were an instance of @Control.Comonad.Comonad@, then one could write
 
 @
   copy = 'expand' extend
@@ -2690,11 +2768,10 @@ duplicate = copy
 
 > Streaming.unzip :: Stream (Of (a,b)) m r -> Stream (Of a) m (Stream (Of b) m r)
 
-   which would not stream, since it would have to accumulate the second stream (of @b@s).
-   Of course, @Data.List@ 'Data.List.unzip' doesn't stream either.
+   which would not stream, since it would have to accumulate a stream of @b@s.
+   (@Data.List@ 'Data.List.unzip' doesn\'t stream either.)
 
-   This @unzip@ does
-   stream, though of course you can spoil this by using e.g. 'toList':
+   This @unzip@ streams properly, as long as 'toList' isn\'t applied to it:
 
 >>> let xs = Prelude.map (\x -> (x, Prelude.show x)) [1..5 :: Int]
 
@@ -2704,8 +2781,8 @@ duplicate = copy
 >>> Prelude.unzip xs
 ([1,2,3,4,5],["1","2","3","4","5"])
 
-    Note the difference of order in the results. It may be of some use to think why.
-    The first application of 'toList' was applied to a stream of integers:
+    Note the difference of order in the results. The first 'toList' was applied
+    to a stream of integers:
 
 >>> :t S.unzip $ S.each xs
 S.unzip $ S.each xs :: Monad m => Stream (Of Int) (Stream (Of String) m) ()
@@ -2714,16 +2791,16 @@ S.unzip $ S.each xs :: Monad m => Stream (Of Int) (Stream (Of String) m) ()
 
 > toList :: Monad m => Stream (Of a) m r -> m (Of [a] r)
 
-    In the case at hand (since I am in @ghci@) @m = Stream (Of String) IO@.
-    So when I apply 'toList', I exhaust that stream of integers, folding
-    it into a list:
+    In GHCi it\'s observed that @m = Stream (Of String) IO@.
+    So when 'toList' is applied, that stream of integers is exhausted, folded
+    into a list:
 
 >>> :t S.toList $ S.unzip $ S.each xs
 S.toList $ S.unzip $ S.each xs
   :: Monad m => Stream (Of String) m (Of [Int] ())
 
-    When I apply 'toList' to /this/, I reduce everything to an ordinary action in @IO@,
-    and return a list of strings:
+    With 'toList' applied again, all is reduced to an @IO@ action
+    and a list of strings is returned:
 
 >>> S.toList $ S.toList $ S.unzip (S.each xs)
 ["1","2","3","4","5"] :> ([1,2,3,4,5] :> ())
@@ -2830,11 +2907,8 @@ catMaybes = loop where
       Just a -> Step (a :> loop snext)
 {-# INLINABLE catMaybes #-}
 
-{-| The 'mapMaybe' function is a version of 'map' which can throw out elements. In particular,
-    the functional argument returns something of type @'Maybe' b@. If this is 'Nothing', no element
-    is added on to the result 'Stream'. If it is @'Just' b@, then @b@ is included in the result 'Stream'.
-
--}
+-- | Map purely over a stream, producing a new stream only containing the
+--   'Just' values.  See 'Data.Maybe.mapMaybe' from @base@.
 mapMaybe :: Monad m => (a -> Maybe b) -> Stream (Of a) m r -> Stream (Of b) m r
 mapMaybe phi = loop where
   loop stream = case stream of
@@ -2845,9 +2919,9 @@ mapMaybe phi = loop where
       Just b -> Step (b :> loop snext)
 {-# INLINABLE mapMaybe #-}
 
-{-| 'slidingWindow' accumulates the first @n@ elements of a stream,
-     update thereafter to form a sliding window of length @n@.
-     It follows the behavior of the slidingWindow function in
+{-| 'slidingWindow' accumulates the first /n/ elements of a stream,
+     updated thereafter to form a sliding window of length /n/.
+     It follows the behavior of the @slidingWindow@ function in
      <https://hackage.haskell.org/package/conduit-combinators-1.0.4/docs/Data-Conduit-Combinators.html#v:slidingWindow conduit-combinators>.
 
 >>> S.print $ S.slidingWindow 4 $ S.each "123456"
@@ -2880,96 +2954,96 @@ slidingWindow n = setup (max 1 n :: Int) mempty
         Right (x,rest) -> setup (m-1) (sequ Seq.|> x) rest
 {-# INLINABLE slidingWindow #-}
 
--- | 'slidingWindowMin' finds the minimum in every sliding window of @n@
+-- | 'slidingWindowMin' finds the minimum in every sliding window of /n/
 -- elements of a stream. If within a window there are multiple elements that are
--- the least, it prefers the first occurrence (if you prefer to have the last
--- occurrence, use the max version and flip your comparator). It satisfies:
+-- least, it prefers the first occurrence. (If you prefer to have the last
+-- occurrence, use the max version and flip the comparator.) It satisfies
 --
 -- @
 -- 'slidingWindowMin' n s = 'map' 'Foldable.minimum' ('slidingWindow' n s)
 -- @
 --
--- Except that it is far more efficient, especially when the window size is
--- large: it calls 'compare' /O(m)/ times overall where /m/ is the total number
+-- except that it is more efficient, especially when the window size is large:
+-- it calls 'compare' /O(m)/ times overall where /m/ is the total number
 -- of elements in the stream.
 slidingWindowMin :: (Monad m, Ord a) => Int -> Stream (Of a) m b -> Stream (Of a) m b
 slidingWindowMin = slidingWindowMinBy compare
 {-# INLINE slidingWindowMin #-}
 
--- | 'slidingWindowMax' finds the maximum in every sliding window of @n@
+-- | 'slidingWindowMax' finds the maximum in every sliding window of /n/
 -- elements of a stream. If within a window there are multiple elements that are
--- the largest, it prefers the last occurrence (if you prefer to have the first
--- occurrence, use the min version and flip your comparator). It satisfies:
+-- largest, it prefers the last occurrence. (If you prefer to have the first
+-- occurrence, use the min version and flip your comparator.) It satisfies
 --
 -- @
 -- 'slidingWindowMax' n s = 'map' 'Foldable.maximum' ('slidingWindow' n s)
 -- @
 --
--- Except that it is far more efficient, especially when the window size is
--- large: it calls 'compare' /O(m)/ times overall where /m/ is the total number
+-- except that it is more efficient, especially when the window size is large:
+-- it calls 'compare' /O(m)/ times overall where /m/ is the total number
 -- of elements in the stream.
 slidingWindowMax :: (Monad m, Ord a) => Int -> Stream (Of a) m b -> Stream (Of a) m b
 slidingWindowMax = slidingWindowMaxBy compare
 {-# INLINE slidingWindowMax #-}
 
--- | 'slidingWindowMinBy' finds the minimum in every sliding window of @n@
--- elements of a stream according to the given comparison function (which should
--- define a total ordering). See notes above about elements that are equal. It
--- satisfies:
+-- | 'slidingWindowMinBy' finds the minimum in every sliding window of /n/
+-- elements of a stream according to the given comparison function, which should
+-- define a total ordering. (See notes above about elements that are equal.) It
+-- satisfies
 --
 -- @
 -- 'slidingWindowMinBy' f n s = 'map' ('Foldable.minimumBy' f) ('slidingWindow' n s)
 -- @
 --
--- Except that it is far more efficient, especially when the window size is
--- large: it calls the comparison function /O(m)/ times overall where /m/ is the
+-- except that it is more efficient, especially when the window size is large:
+-- it calls the comparison function /O(m)/ times overall where /m/ is the
 -- total number of elements in the stream.
 slidingWindowMinBy :: Monad m => (a -> a -> Ordering) -> Int -> Stream (Of a) m b -> Stream (Of a) m b
 slidingWindowMinBy cmp = slidingWindowOrd id (\a b -> cmp a b == GT)
 {-# INLINE slidingWindowMinBy #-}
 
--- | 'slidingWindowMaxBy' finds the maximum in every sliding window of @n@
--- elements of a stream according to the given comparison function (which should
--- define a total ordering). See notes above about elements that are equal. It
--- satisfies:
+-- | 'slidingWindowMaxBy' finds the maximum in every sliding window of /n/
+-- elements of a stream according to the given comparison function, which should
+-- define a total ordering. (See notes above about elements that are equal.) It
+-- satisfies
 --
 -- @
 -- 'slidingWindowMaxBy' f n s = 'map' ('Foldable.maximumBy' f) ('slidingWindow' n s)
 -- @
 --
--- Except that it is far more efficient, especially when the window size is
--- large: it calls the comparison function /O(m)/ times overall where /m/ is the
+-- except that it is more efficient, especially when the window size is large:
+-- it calls the comparison function /O(m)/ times overall where /m/ is the
 -- total number of elements in the stream.
 slidingWindowMaxBy :: Monad m => (a -> a -> Ordering) -> Int -> Stream (Of a) m b -> Stream (Of a) m b
 slidingWindowMaxBy cmp = slidingWindowOrd id (\a b -> cmp a b /= GT)
 {-# INLINE slidingWindowMaxBy #-}
 
--- | 'slidingWindowMinOn' finds the minimum in every sliding window of @n@
--- elements of a stream according to the given projection function. See notes
--- above about elements that are equal. It satisfies:
+-- | 'slidingWindowMinOn' finds the minimum in every sliding window of /n/
+-- elements of a stream according to the given projection function. (See notes
+-- above about elements that are equal.) It satisfies
 --
 -- @
 -- 'slidingWindowMinOn' f n s = 'map' ('Foldable.minimumOn' ('comparing' f)) ('slidingWindow' n s)
 -- @
 --
--- Except that it is far more efficient, especially when the window size is
--- large: it calls 'compare' on the projected value /O(m)/ times overall where
+-- except that it is more efficient, especially when the window size is large:
+-- it calls 'compare' on the projected value /O(m)/ times overall where
 -- /m/ is the total number of elements in the stream, and it calls the
 -- projection function exactly /m/ times.
 slidingWindowMinOn :: (Monad m, Ord p) => (a -> p) -> Int -> Stream (Of a) m b -> Stream (Of a) m b
 slidingWindowMinOn proj = slidingWindowOrd proj (\a b -> compare a b == GT)
 {-# INLINE slidingWindowMinOn #-}
 
--- | 'slidingWindowMaxOn' finds the maximum in every sliding window of @n@
--- elements of a stream according to the given projection function. See notes
--- above about elements that are equal. It satisfies:
+-- | 'slidingWindowMaxOn' finds the maximum in every sliding window of /n/
+-- elements of a stream according to the given projection function. (See notes
+-- above about elements that are equal.) It satisfies
 --
 -- @
 -- 'slidingWindowMaxOn' f n s = 'map' ('Foldable.maximumOn' ('comparing' f)) ('slidingWindow' n s)
 -- @
 --
--- Except that it is far more efficient, especially when the window size is
--- large: it calls 'compare' on the projected value /O(m)/ times overall where
+-- except that it is more efficient, especially when the window size is large:
+-- it calls 'compare' on the projected value /O(m)/ times overall where
 -- /m/ is the total number of elements in the stream, and it calls the
 -- projection function exactly /m/ times.
 slidingWindowMaxOn :: (Monad m, Ord p) => (a -> p) -> Int -> Stream (Of a) m b -> Stream (Of a) m b
@@ -3090,8 +3164,8 @@ dropButRetainAtLeastOne n = loop Nothing n
 {-# INLINABLE dropButRetainAtLeastOne #-}
 
 
--- | Map monadically over a stream, producing a new stream
---   only containing the 'Just' values.
+-- | Map monadically over a stream, producing a new stream only containing the
+-- 'Just' values.
 mapMaybeM :: Monad m => (a -> m (Maybe b)) -> Stream (Of a) m r -> Stream (Of b) m r
 mapMaybeM phi = loop where
   loop stream = case stream of
