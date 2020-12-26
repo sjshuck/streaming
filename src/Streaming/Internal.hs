@@ -105,24 +105,26 @@ import Data.Semigroup (Semigroup (..))
 
 {- $stream
 
-    The 'Stream' data type is equivalent to @FreeT@ and can represent any effectful
-    succession of steps, where the form of the steps or 'commands' is
-    specified by the first (functor) parameter.
+    The 'Stream' data type is equivalent
+    to [@FreeT@](https://hackage.haskell.org/package/free-5.1.5/docs/Control-Monad-Trans-Free.html#t:FreeT)
+    and can represent any effectful succession of steps, where the form of the
+    steps or \'commands\' is specified by the first (functor) parameter.
 
 > data Stream f m r = Step !(f (Stream f m r)) | Effect (m (Stream f m r)) | Return r
 
-    The /producer/ concept uses the simple functor @ (a,_) @ \- or the stricter
-    @ Of a _ @. Then the news at each step or layer is just: an individual item of type @a@.
-    Since @Stream (Of a) m r@ is equivalent to @Pipe.Producer a m r@, much of
-    the @pipes@ @Prelude@ can easily be mirrored in a @streaming@ @Prelude@. Similarly,
-    a simple @Consumer a m r@ or @Parser a m r@ concept arises when the base functor is
-    @ (a -> _) @ . @Stream ((->) input) m result@ consumes @input@ until it returns a
-    @result@.
+    The /producer/ concept uses the functor @(a, )@&#x2014;or the stricter
+    @`Data.Functor.Of` a@&#x2014;which causes each step or layer to yield an
+    individual item of type @a@. Since @Stream (Of a) m r@ is equivalent
+    to @[Pipes.Producer\'](https://hackage.haskell.org/package/pipes-4.3.14/docs/Pipes.html#t:Producer-39-) a m r@,
+    much of @Pipes.Prelude@ can be directly reimplemented in a @Prelude@ here.
+    Similarly, a @Consumer a m r@ or @Parser a m r@ concept arises when the base
+    functor is function application: @Stream ((->) input) m result@ consumes
+    input until it returns a result.
 
-    To avoid breaking reasoning principles, the constructors
-    should not be used directly. A pattern-match should go by way of 'inspect' \
-    \- or, in the producer case, 'Streaming.Prelude.next'
-    The constructors are exported by the 'Internal' module.
+    To facilitate reasoning about streams, the 'Stream' constructors should not
+    be used directly. A pattern match should come by way of 'inspect', or
+    'Streaming.Prelude.next' in the producer case. Nevertheless, the
+    constructors are exported here.
 -}
 data Stream f m r = Step !(f (Stream f m r))
                   | Effect (m (Stream f m r))
@@ -312,7 +314,7 @@ instance (Functor f, Monad m) => Applicative (Stream f m) where
 > empty = never
 > (<|>) = zipsWith (liftA2 (,))
 
-   See also 'never', 'untilJust' and 'delays'
+   See also 'never', 'untilJust' and 'delays'.
 -}
 instance (Applicative f, Monad m) => Alternative (Stream f m) where
   empty = never
@@ -388,7 +390,7 @@ instance (Functor f, MonadError e m) => MonadError e (Stream f m) where
       Step   g -> Step (fmap loop g)
   {-# INLINABLE catchError #-}
 
-{-| Map a stream to its church encoding; compare @Data.List.foldr@.
+{-| Tear down a stream into its Church encoding; compare 'Data.List.foldr'.
     'destroyExposed' may be more efficient in some cases when
     applicable, but it is less safe.
 
@@ -409,8 +411,8 @@ destroy stream0 construct theEffect done = theEffect (loop stream0) where
 
 
 {-| 'streamFold' reorders the arguments of 'destroy' to be more akin
-    to @foldr@  It is more convenient to query in ghci to figure out
-    what kind of \'algebra\' you need to write.
+    to 'Prelude.foldr'.  It is more convenient to query in @ghci@ to figure out
+    what types you need to write.
 
 >>> :t streamFold return join
 (Monad m, Functor f) =>
@@ -445,7 +447,8 @@ streamFold
 streamFold done theEffect construct stream  = destroy stream construct theEffect done
 {-# INLINE streamFold #-}
 
-{- | Reflect a church-encoded stream; cp. @GHC.Exts.build@
+{- | Construct a stream from its Church encoding.
+     See [@GHC.Exts.build@](https://hackage.haskell.org/package/base-4.14.1.0/docs/GHC-Base.html#v:build).
 
 > streamFold return_ effect_ step_ (streamBuild psi) = psi return_ effect_ step_
 -}
@@ -457,10 +460,10 @@ streamBuild = \phi -> phi Return Effect Step
 
 {-| Inspect the first stage of a freely layered sequence.
     Compare @Pipes.next@ and the replica @Streaming.Prelude.next@.
-    This is the 'uncons' for the general 'unfold'.
+    This is the \'uncons\' for the general 'unfold'.
 
 > unfold inspect = id
-> Streaming.Prelude.unfoldr StreamingPrelude.next = id
+> Streaming.Prelude.unfoldr Streaming.Prelude.next = id
 -}
 inspect :: Monad m =>
      Stream f m r -> m (Either r (f (Stream f m r)))
@@ -471,8 +474,8 @@ inspect = loop where
     Step fs  -> return (Right fs)
 {-# INLINABLE inspect #-}
 
-{-| Build a @Stream@ by unfolding steps starting from a seed. See also
-    the specialized 'Streaming.Prelude.unfoldr' in the prelude.
+{-| Build a 'Stream' by unfolding steps starting from a seed. See also the
+    specialized 'Streaming.Prelude.unfoldr' in the @Prelude@.
 
 > unfold inspect = id -- modulo the quotient we work with
 > unfold Pipes.next :: Monad m => Producer a m r -> Stream ((,) a) m r
@@ -492,7 +495,7 @@ unfold step = loop where
 
 
 {- | Map layers of one functor to another with a transformation. Compare
-     hoist, which has a similar effect on the 'monadic' parameter.
+     'hoist', which has a similar effect on the monadic parameter.
 
 > maps id = id
 > maps f . maps g = maps (f . g)
@@ -508,14 +511,14 @@ maps phi = loop where
 {-# INLINABLE maps #-}
 
 
-{- | Map layers of one functor to another with a transformation involving the base monad.
+{- | Map layers of one functor to another with a transformation in the base monad.
      'maps' is more fundamental than @mapsM@, which is best understood as a convenience
      for effecting this frequent composition:
 
 > mapsM phi = decompose . maps (Compose . phi)
 
-     The streaming prelude exports the same function under the better name @mapped@,
-     which overlaps with the lens libraries.
+     @Streaming.Prelude@ exports the same function under the better name
+     `Streaming.Prelude.mapped`, which conflicts with the lens libraries.
 
 -}
 mapsM :: (Monad m, Functor f) => (forall x . f x -> m (g x)) -> Stream f m r -> Stream g m r
@@ -526,8 +529,7 @@ mapsM phi = loop where
     Step   f -> Effect (fmap Step (phi (fmap loop f)))
 {-# INLINABLE mapsM #-}
 
-{- | Map layers of one functor to another with a transformation. Compare
-     hoist, which has a similar effect on the 'monadic' parameter.
+{- | Map layers of one functor to another with a transformation.
 
 > mapsPost id = id
 > mapsPost f . mapsPost g = mapsPost (f . g)
@@ -548,7 +550,7 @@ mapsPost phi = loop where
     Step   f -> Step $ fmap loop $ phi f
 {-# INLINABLE mapsPost #-}
 
-{- | Map layers of one functor to another with a transformation involving the base monad.
+{- | Map layers of one functor to another with a transformation in the base monad.
      @mapsMPost@ is essentially the same as 'mapsM', but it imposes a 'Functor' constraint on
      its target functor rather than its source functor. It should be preferred if 'fmap'
      is cheaper for the target functor than for the source functor.
@@ -558,8 +560,8 @@ mapsPost phi = loop where
 
 > mapsMPost phi = decompose . mapsPost (Compose . phi)
 
-     The streaming prelude exports the same function under the better name @mappedPost@,
-     which overlaps with the lens libraries.
+     @Streaming.Prelude@ exports the same function under the better name
+     `Streaming.Prelude.mappedPost`.
 
 -}
 mapsMPost :: forall m f g r. (Monad m, Functor g)
@@ -573,17 +575,17 @@ mapsMPost phi = loop where
     Step   f -> Effect $ fmap (Step . fmap loop) (phi f)
 {-# INLINABLE mapsMPost #-}
 
-{-| Rearrange a succession of layers of the form @Compose m (f x)@.
+{-| Rearrange a succession of layers of the form @`Compose` m f@.
 
-   we could as well define @decompose@ by @mapsM@:
+   We might define @decompose@ using `mapsM`:
 
 > decompose = mapped getCompose
 
-  but @mapped@ is best understood as:
+  but `mapped` is best understood as:
 
 > mapped phi = decompose . maps (Compose . phi)
 
-  since @maps@ and @hoist@ are the really fundamental operations that preserve the
+  since `maps` and `hoist` are the really fundamental operations that preserve the
   shape of the stream:
 
 > maps  :: (Monad m, Functor f) => (forall x. f x -> g x) -> Stream f m r -> Stream g m r
@@ -618,7 +620,7 @@ mapsM_ f = run . maps f
 {-# INLINE mapsM_ #-}
 
 
-{-| Interpolate a layer at each segment. This specializes to e.g.
+{-| Interpolate a layer at each segment. As a special case,
 
 > intercalates :: (Monad m, Functor f) => Stream f m () -> Stream (Stream f m) m r -> Stream f m r
 -}
@@ -641,7 +643,7 @@ intercalates sep = go0
         go1 f'
 {-# INLINABLE intercalates #-}
 
-{-| Specialized fold following the usage of @Control.Monad.Trans.Free@
+{-| Specialized fold following the usage of @Control.Monad.Trans.Free@.
 
 > iterTM alg = streamFold return (join . lift)
 > iterTM alg = iterT alg . hoist lift
@@ -653,7 +655,7 @@ iterTM ::
 iterTM out stream = destroyExposed stream out (join . lift) return
 {-# INLINE iterTM #-}
 
-{-| Specialized fold following the usage of @Control.Monad.Trans.Free@
+{-| Specialized fold following the usage of @Control.Monad.Trans.Free@.
 
 > iterT alg = streamFold return join alg
 > iterT alg = runIdentityT . iterTM (IdentityT . alg . fmap runIdentityT)
@@ -663,7 +665,7 @@ iterT ::
 iterT out stream = destroyExposed stream out join return
 {-# INLINE iterT #-}
 
-{-| Dissolves the segmentation into layers of @Stream f m@ layers.
+{-| Join into a single stream layers of @Stream f m@.
 
 -}
 concats :: (Monad m, Functor f) => Stream (Stream f m) m r -> Stream f m r
@@ -709,9 +711,9 @@ splitsAt  = loop  where
           _ -> Step (fmap (loop (n-1)) fs)
 {-# INLINABLE splitsAt #-}
 
-{- Functor-general take.
+{- Functor-general `take`.
 
-   @takes 3@ can take three individual values
+   @takes 3@ can take three individual values:
 
 >>> S.print $ takes 3 $ each [1..]
 1
@@ -719,15 +721,15 @@ splitsAt  = loop  where
 3
 
 
-    or three sub-streams
+    or three sub-streams:
 
 >>> S.print $ mapped S.toList $ takes 3 $ chunksOf 2 $ each [1..]
 [1,2]
 [3,4]
 [5,6]
 
-   Or, using 'Data.ByteString.Streaming.Char' (here called @Q@),
-   three byte streams.
+   Or, using [@Streaming.ByteString@](https://hackage.haskell.org/package/streaming-bytestring-0.2.0/docs/Streaming-ByteString.html)
+   (here qualified as @Q@), three byte streams:
 
 >>> Q.stdout $ Q.unlines $ takes 3 $ Q.lines $ Q.chunk "a\nb\nc\nd\ne\nf"
 a
@@ -739,7 +741,7 @@ takes :: (Monad m, Functor f) => Int -> Stream f m r -> Stream f m ()
 takes n = void . splitsAt n
 {-# INLINE takes #-}
 
-{-| Break a stream into substreams each with n functorial layers.
+{-| Break a stream into substreams each with /n/ functorial layers.
 
 >>>  S.print $ mapped S.sum $ chunksOf 2 $ each [1,1,1,1,1]
 2
@@ -777,14 +779,14 @@ repeatsM mf = loop where
      f <- mf
      return $ Step $ loop <$ f
 
-{- | Repeat a functorial layer, command or instruction a fixed number of times.
+{- | Repeat a functorial layer (a \"command\" or \"instruction\") a fixed number of times.
 
 > replicates n = takes n . repeats
 -}
 replicates :: (Monad m, Functor f) => Int -> f () -> Stream f m ()
 replicates n f = splitsAt n (repeats f) >> return ()
 
-{-| Construct an infinite stream by cycling a finite one
+{-| Construct an infinite stream by cycling a finite one.
 
 > cycles = forever
 
@@ -847,15 +849,14 @@ mapsMExposed :: (Monad m, Functor f)
 mapsMExposed = mapsM
 {-# INLINABLE mapsMExposed #-}
 
-{-| Map a stream directly to its church encoding; compare @Data.List.foldr@
+{-| Tear down a stream into its Church encoding; compare 'Data.List.foldr'.
     It permits distinctions that should be hidden, as can be seen from
     e.g.
 
     @isPure stream = destroyExposed (const True) (const False) (const True)@
 
-    and similar nonsense.  The crucial
-    constraint is that the @m x -> x@ argument is an /Eilenberg-Moore algebra/.
-    See Atkey, "Reasoning about Stream Processing with Effects"
+    The crucial requirement is that the @m b -> b@ argument be an /Eilenberg-Moore algebra/.
+    See [Atkey, \"Reasoning about Stream Processing with Effects\"](https://bentnib.org/posts/2012-01-06-streams.html).
 
     When in doubt, use 'destroy' instead.
 -}
@@ -870,9 +871,8 @@ destroyExposed stream0 construct theEffect done = loop stream0 where
 {-# INLINABLE destroyExposed #-}
 
 
-{-| This is akin to the @observe@ of @Pipes.Internal@ . It reeffects the layering
-    in instances of @Stream f m r@ so that it replicates that of
-    @FreeT@.
+{-| This is akin to [@Pipes.Internal.observe@](https://hackage.haskell.org/package/pipes-4.3.14/docs/Pipes-Internal.html#v:observe).
+    It re-effects the layering of @Stream@ so that it behaves like @FreeT@.
 
 -}
 unexposed :: (Functor f, Monad m) => Stream f m r -> Stream f m r
@@ -913,7 +913,7 @@ wrap = Step
 {-# INLINE wrap #-}
 
 
-{- | Wrap an effect that returns a stream
+{- | Wrap an effect that returns a stream.
 
 > effect = join . lift
 
@@ -923,7 +923,7 @@ effect = Effect
 {-# INLINE effect #-}
 
 
-{-| @yields@ is like @lift@ for items in the streamed functor.
+{-| @yields@ is like `lift` for items in the streamed functor.
     It makes a singleton or one-layer succession.
 
 > lift :: (Monad m, Functor f)    => m r -> Stream f m r
@@ -1045,20 +1045,20 @@ switch s = case s of InL a -> InR a; InR a -> InL a
     with the streaming on the other functor as the governing monad. This is
     useful for acting on one or the other functor with a fold, leaving the
     other material for another treatment. It generalizes
-    'Data.Either.partitionEithers', but actually streams properly.
+    'Data.Either.partitionEithers', with proper streaming.
 
 >>> let odd_even = S.maps (S.distinguish even) $ S.each [1..10::Int]
 >>> :t separate odd_even
 separate odd_even
   :: Monad m => Stream (Of Int) (Stream (Of Int) m) ()
 
-    Now, for example, it is convenient to fold on the left and right values separately:
+    It is convenient to fold on the left and right values separately:
 
 >>> S.toList $ S.toList $ separate odd_even
 [2,4,6,8,10] :> ([1,3,5,7,9] :> ())
 
 
-   Or we can write them to separate files or whatever:
+    Or we can write them to separate files:
 
 >>> S.writeFile "even.txt" . S.show $ S.writeFile "odd.txt" . S.show $ S.separate odd_even
 >>> :! cat even.txt
@@ -1074,8 +1074,8 @@ separate odd_even
 7
 9
 
-   Of course, in the special case of @Stream (Of a) m r@, we can achieve the above
-   effects more simply by using 'Streaming.Prelude.copy'
+   Note that in the special case of @Stream (`Data.Functor.Of` a) m r@, we can
+   achieve the above effects more simply by using 'Streaming.Prelude.copy':
 
 >>> S.toList . S.filter even $ S.toList . S.filter odd $ S.copy $ each [1..10::Int]
 [2,4,6,8,10] :> ([1,3,5,7,9] :> ())
@@ -1103,12 +1103,11 @@ unseparate str = destroyExposed
   return
 {-# INLINABLE unseparate #-}
 
--- | If 'Of' had a @Comonad@ instance, then we'd have
+-- | If 'Of' had a @Comonad@ instance, then we\'d have
 --
--- @copy = expand extend@
+-- @`Streaming.Prelude.copy` = expand extend@
 --
--- See 'expandPost' for a version that requires a @Functor g@
--- instance instead.
+-- See 'expandPost' for a version that requires @Functor g@ instead of @f@.
 expand :: (Monad m, Functor f)
        => (forall a b. (g a -> b) -> f a -> h b)
        -> Stream f m r -> Stream g (Stream h m) r
@@ -1118,12 +1117,11 @@ expand ext = loop where
   loop (Effect m) = Effect $ Effect $ fmap (Return . loop) m
 {-# INLINABLE expand #-}
 
--- | If 'Of' had a @Comonad@ instance, then we'd have
+-- | If 'Of' had a @Comonad@ instance, then we\'d have
 --
--- @copy = expandPost extend@
+-- @`Streaming.Prelude.copy` = expandPost extend@
 --
--- See 'expand' for a version that requires a @Functor f@ instance
--- instead.
+-- See 'expand' for a version that requires @Functor f@ instead of @g@.
 expandPost :: (Monad m, Functor g)
        => (forall a b. (g a -> b) -> f a -> h b)
        -> Stream f m r -> Stream g (Stream h m) r
@@ -1142,8 +1140,8 @@ unzips str = destroyExposed
   return
 {-# INLINABLE unzips #-}
 
-{-| Group layers in an alternating stream into adjoining sub-streams
-    of one type or another.
+{-| Group layers of a `Sum`med stream into adjoining, alternating
+    sub-streams.
 -}
 groups :: (Monad m, Functor f, Functor g)
            => Stream (Sum f g) m r
@@ -1201,13 +1199,13 @@ groups = loop
 --       Right (InL fstr) -> wrap (fmap loop fstr)
 --       Right (InR gstr) -> return (wrap (InR gstr))
 
-{- | 'never' interleaves the pure applicative action with the return of the monad forever.
+{- | 'never' interleaves the pure applicative action with the `return` of the monad forever.
      It is the 'empty' of the 'Alternative' instance, thus
 
 > never <|> a = a
 > a <|> never = a
 
-     and so on. If w is a monoid then @never :: Stream (Of w) m r@ is
+     If @w@ is a monoid then @never :: Stream (`Data.Functor.Of` w) m r@ is
      the infinite sequence of 'mempty', and
      @str1 \<|\> str2@ appends the elements monoidally until one of streams ends.
      Thus we have, e.g.
@@ -1226,26 +1224,27 @@ groups = loop
 
 >>> S.stdoutLn $ S.take 2 $ foldr (<|>) never [S.stdinLn, S.repeat " ", S.stdinLn, S.repeat " ", S.stdinLn ]
 
-     Where 'f' is a monad, @(\<|\>)@ sequences the conjoined streams stepwise. See the
+     Where @f@ is a monad, @(\<|\>)@ sequences the conjoined streams stepwise. See the
      definition of @paste@ <https://gist.github.com/michaelt/6c6843e6dd8030e95d58 here>,
      where the separate steps are bytestreams corresponding to the lines of a file.
 
      Given, say,
 
-> data Branch r = Branch r r deriving Functor  -- add obvious applicative instance
+> data Branch r = Branch r r deriving Functor
+> instance Applicative Branch where
+>   pure x = Branch x x
+>   Branch f g <*> Branch x y = Branch (f x) (g y)
 
     then @never :: Stream Branch Identity r@  is the pure infinite binary tree with
     (inaccessible) @r@s in its leaves. Given two binary trees, @tree1 \<|\> tree2@
     intersects them, preserving the leaves that came first,
-    so @tree1 \<|\> never = tree1@
+    so @tree1 \<|\> never = tree1@.
 
     @Stream Identity m r@ is an action in @m@ that is indefinitely delayed. Such an
     action can be constructed with e.g. 'untilJust'.
 
-> untilJust :: (Monad m, Applicative f) => m (Maybe r) -> Stream f m r
-
-    Given two such items, @\<|\>@ instance races them.
-    It is thus the iterative monad transformer specially defined in
+    Given two such items, @(\<|\>)@ races them.
+    It is thus the iterative monad transformer defined in
     <https://hackage.haskell.org/package/free-4.12.1/docs/Control-Monad-Trans-Iter.html Control.Monad.Trans.Iter>
 
     So, for example, we might write
@@ -1258,11 +1257,6 @@ two<Enter>
 three<Enter>
 four<Enter>
 "four"
-
-
-    The 'Alternative' instance in
-    <https://hackage.haskell.org/package/free-4.12.1/docs/Control-Monad-Trans-Free.html Control.Monad.Trans.Free>
-    is avowedly wrong, though no explanation is given for this.
 
 
 -}
@@ -1352,8 +1346,7 @@ delays seconds = loop where
 --               Step f   -> Step (fmap loop f)
 --     loop str
 
-{- | Repeat a
-
+{- | Repeat a monadic action as steps of a stream until @Just r@ is returned.
 -}
 
 untilJust :: (Monad m, Applicative f) => m (Maybe r) -> Stream f m r
